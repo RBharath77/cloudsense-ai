@@ -58,10 +58,12 @@ class CostRecord(Base):
     organization_id: Mapped[str]=mapped_column(String, index=True)
     provider: Mapped[str]=mapped_column(String, index=True)
     service: Mapped[str]=mapped_column(String, index=True)
-    region: Mapped[str]=mapped_column(String)
-    resource_id: Mapped[str|None]=mapped_column(String, index=True)
+    region: Mapped[str]=mapped_column(String, default="global")
+    resource_id: Mapped[str|None]=mapped_column(String, index=True, nullable=True)
     amount: Mapped[float]=mapped_column(Float)
     recorded_at: Mapped[datetime]=mapped_column(DateTime, index=True)
+    currency: Mapped[str]=mapped_column(String, default="USD")
+    import_id: Mapped[str|None]=mapped_column(String, ForeignKey("billing_imports.id"), index=True, nullable=True)
 
 class MetricRecord(Base):
     __tablename__="resource_metrics"
@@ -197,3 +199,19 @@ class AuditLog(Base):
     status: Mapped[str]=mapped_column(String)
     detail: Mapped[str|None]=mapped_column(Text, nullable=True)
     created_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)
+
+class BillingImport(Base):
+    __tablename__="billing_imports"
+    id: Mapped[str]=mapped_column(String, primary_key=True, default=uid)
+    organization_id: Mapped[str]=mapped_column(String, ForeignKey("organizations.id"), index=True)
+    user_id: Mapped[str|None]=mapped_column(String, ForeignKey("users.id"), nullable=True)
+    filename: Mapped[str]=mapped_column(String)
+    file_hash: Mapped[str]=mapped_column(String, index=True)
+    idempotency_key: Mapped[str|None]=mapped_column(String, index=True, nullable=True)
+    status: Mapped[str]=mapped_column(String, default="PENDING")
+    total_rows: Mapped[int]=mapped_column(Integer, default=0)
+    imported_rows: Mapped[int]=mapped_column(Integer, default=0)
+    error_count: Mapped[int]=mapped_column(Integer, default=0)
+    errors_summary: Mapped[str|None]=mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)
+    completed_at: Mapped[datetime|None]=mapped_column(DateTime, nullable=True)

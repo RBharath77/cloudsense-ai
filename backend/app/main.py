@@ -1,23 +1,37 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
 import os
+import json
 from .database import Base, engine, get_db
 from .models import *
 from .auth import *
 from .seed import seed
 from .ml import forecast
+from .services import process_billing_csv
 
 app=FastAPI(title="CloudSense AI API", version="1.0.0")
 app.add_middleware(CORSMiddleware,allow_origins=["http://localhost:3000"],allow_credentials=True,allow_methods=["*"],allow_headers=["*"])
+Base.metadata.create_all(engine)
+
+with engine.connect() as _conn:
+    from sqlalchemy import text
+    try:
+        _conn.execute(text("ALTER TABLE cost_records ADD COLUMN currency VARCHAR DEFAULT 'USD'"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE cost_records ADD COLUMN import_id VARCHAR"))
+        _conn.commit()
+    except Exception: pass
 
 @app.on_event("startup")
 def startup():
-    Base.metadata.create_all(engine); seed()
+    seed()
 
 @app.get("/health")
 def health(): return {"status":"ok","cloud_mode":"mock"}
@@ -149,3 +163,64 @@ def download_report(id:str,user=Depends(current_user),db:Session=Depends(get_db)
     r=db.get(Report,id)
     if not r or r.organization_id!=org(user): raise HTTPException(404,"Report not found")
     return FileResponse(r.file_path,media_type="application/pdf",filename="cloudsense-report.pdf")
+
+@app.post("/api/billing/import")
+async def import_billing_csv(
+    file: UploadFile = File(...),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    user=Depends(current_user),
+    db: Session = Depends(get_db)
+):
+    content = await file.read()
+    result = process_billing_csv(
+        db=db,
+        organization_id=org(user),
+        user_id=user.id,
+        filename=file.filename or "uploaded.csv",
+        content=content,
+        idempotency_key=idempotency_key
+    )
+    if result.get("status") == "FAILED":
+        status_code = 400
+    elif result.get("idempotent_replay") or result.get("status") == "DUPLICATE":
+        status_code = 200
+    else:
+        status_code = 201
+    return JSONResponse(status_code=status_code, content=result)
+
+@app.get("/api/billing/imports")
+def get_billing_imports(user=Depends(current_user), db: Session = Depends(get_db)):
+    imports = db.query(BillingImport).filter_by(organization_id=org(user)).order_by(BillingImport.created_at.desc()).all()
+    return [
+        {
+            "id": imp.id,
+            "filename": imp.filename,
+            "status": imp.status,
+            "total_rows": imp.total_rows,
+            "imported_rows": imp.imported_rows,
+            "error_count": imp.error_count,
+            "created_at": imp.created_at.isoformat(),
+            "completed_at": imp.completed_at.isoformat() if imp.completed_at else None
+        }
+        for imp in imports
+    ]
+
+@app.get("/api/billing/imports/{id}")
+def get_billing_import_detail(id: str, user=Depends(current_user), db: Session = Depends(get_db)):
+    imp = db.get(BillingImport, id)
+    if not imp or imp.organization_id != org(user):
+        raise HTTPException(404, "Billing import not found")
+    errors = json.loads(imp.errors_summary) if imp.errors_summary else []
+    return {
+        "id": imp.id,
+        "filename": imp.filename,
+        "status": imp.status,
+        "file_hash": imp.file_hash,
+        "idempotency_key": imp.idempotency_key,
+        "total_rows": imp.total_rows,
+        "imported_rows": imp.imported_rows,
+        "error_count": imp.error_count,
+        "errors": errors,
+        "created_at": imp.created_at.isoformat(),
+        "completed_at": imp.completed_at.isoformat() if imp.completed_at else None
+    }
