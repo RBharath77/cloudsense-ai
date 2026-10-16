@@ -1,0 +1,1 @@
+import Shell from '../../components/Shell'; import {Generic} from '../../components/Analytics'; export default function Page(){return <Shell><Generic title="Anomalies" path="/api/anomalies"/></Shell>}

@@ -1,0 +1,1 @@
+import Shell from '../../components/Shell'; import {Assistant} from '../../components/Analytics'; export default function Page(){return <Shell><Assistant/></Shell>}

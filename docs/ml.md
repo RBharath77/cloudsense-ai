@@ -1,0 +1,2 @@
+# ML
+Forecasting uses historical cost observations and a fitted regression trend with held-out MAE/RMSE evaluation. Anomaly detection uses Isolation Forest. Optimization combines utilization and cost heuristics into actionable savings recommendations. Synthetic data means metrics are suitable for pipeline demonstration, not claims of production accuracy. Requirements call for MAE/RMSE/MAPE where possible and precision/recall/F1 when labeled anomaly data exists. fileciteturn0file0L1965-L2028
