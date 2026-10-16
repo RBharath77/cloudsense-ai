@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import String, Float, Integer, DateTime, ForeignKey, Text, Boolean, JSON
 from sqlalchemy.orm import Mapped, mapped_column
-from .database import Base
+from ..database import Base
 
 def uid(): return str(uuid.uuid4())
 

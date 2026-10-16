@@ -42,11 +42,24 @@ def org(user): return user.organization_id
 
 @app.get("/api/dashboard/summary")
 def dashboard(user=Depends(current_user),db:Session=Depends(get_db)):
-    oid=org(user); spend=db.query(func.sum(CostRecord.amount)).filter(CostRecord.organization_id==oid,CostRecord.recorded_at>=datetime.utcnow()-timedelta(days=30)).scalar() or 0
-    # monthly cost records are daily/resource-level, so use current month-ish demo rollup; normalize for executive view
+    oid=org(user)
+    spend=db.query(func.sum(CostRecord.amount)).filter(CostRecord.organization_id==oid,CostRecord.recorded_at>=datetime.utcnow()-timedelta(days=30)).scalar() or 0
     total=db.query(func.sum(CloudResource.monthly_cost)).filter(CloudResource.organization_id==oid).scalar() or 0
+    display_spend=spend if spend > 0 else total
     savings=db.query(func.sum(Recommendation.monthly_saving)).filter(Recommendation.organization_id==oid,Recommendation.action_status=="PENDING").scalar() or 0
-    return {"total_spend":round(total,2),"current_month_spend":round(total,2),"predicted_month_end":round(total*1.102,2),"potential_savings":round(savings,2),"active_resources":db.query(CloudResource).filter_by(organization_id=oid).count(),"anomalies":db.query(Anomaly).filter_by(organization_id=oid).count(),"cloud_health":94.2,"carbon_kg":round(db.query(func.sum(CarbonRecord.co2_kg)).filter_by(organization_id=oid).scalar() or 0,2)}
+    res_count=db.query(CloudResource).filter_by(organization_id=oid).count()
+    avg_health=db.query(func.avg(CloudResource.health)).filter_by(organization_id=oid).scalar()
+    health_val=round(avg_health, 1) if avg_health is not None else 100.0
+    return {
+        "total_spend": round(display_spend, 2),
+        "current_month_spend": round(display_spend, 2),
+        "predicted_month_end": round(display_spend * 1.102, 2),
+        "potential_savings": round(savings, 2),
+        "active_resources": res_count,
+        "anomalies": db.query(Anomaly).filter_by(organization_id=oid).count(),
+        "cloud_health": health_val,
+        "carbon_kg": round(db.query(func.sum(CarbonRecord.co2_kg)).filter_by(organization_id=oid).scalar() or 0, 2)
+    }
 
 @app.get("/api/cloud/accounts")
 def accounts(user=Depends(current_user),db:Session=Depends(get_db)): return [{"id":a.id,"provider":a.provider,"name":a.name,"identifier":a.identifier,"region":a.region,"status":a.status,"last_sync":a.last_sync} for a in db.query(CloudAccount).filter_by(organization_id=org(user)).all()]

@@ -6,3 +6,5 @@ node_modules/
 cloudsense.db
 *.db
 .DS_Store
+.venv/
+.pytest_cache/

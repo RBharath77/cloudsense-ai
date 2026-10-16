@@ -1,8 +1,12 @@
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_DB_PATH = f"sqlite:///{BACKEND_DIR / 'cloudsense.db'}"
 
 class Settings(BaseSettings):
     app_name: str = "CloudSense AI"
-    database_url: str = "sqlite:///./cloudsense.db"
+    database_url: str = DEFAULT_DB_PATH
     jwt_secret: str = "dev-only-change-me"
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 60
