@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Header
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Header, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -12,7 +12,14 @@ from .models import *
 from .auth import *
 from .seed import seed
 from .ml import forecast
-from .services import process_billing_csv
+from .services import (
+    process_billing_csv,
+    get_cost_summary,
+    get_daily_costs,
+    get_dashboard_metrics,
+    generate_costs_csv,
+    get_cost_lineage,
+)
 
 app=FastAPI(title="CloudSense AI API", version="1.0.0")
 app.add_middleware(CORSMiddleware,allow_origins=["http://localhost:3000"],allow_credentials=True,allow_methods=["*"],allow_headers=["*"])
@@ -55,25 +62,8 @@ def login(data:Login,db:Session=Depends(get_db)):
 def org(user): return user.organization_id
 
 @app.get("/api/dashboard/summary")
-def dashboard(user=Depends(current_user),db:Session=Depends(get_db)):
-    oid=org(user)
-    spend=db.query(func.sum(CostRecord.amount)).filter(CostRecord.organization_id==oid,CostRecord.recorded_at>=datetime.utcnow()-timedelta(days=30)).scalar() or 0
-    total=db.query(func.sum(CloudResource.monthly_cost)).filter(CloudResource.organization_id==oid).scalar() or 0
-    display_spend=spend if spend > 0 else total
-    savings=db.query(func.sum(Recommendation.monthly_saving)).filter(Recommendation.organization_id==oid,Recommendation.action_status=="PENDING").scalar() or 0
-    res_count=db.query(CloudResource).filter_by(organization_id=oid).count()
-    avg_health=db.query(func.avg(CloudResource.health)).filter_by(organization_id=oid).scalar()
-    health_val=round(avg_health, 1) if avg_health is not None else 100.0
-    return {
-        "total_spend": round(display_spend, 2),
-        "current_month_spend": round(display_spend, 2),
-        "predicted_month_end": round(display_spend * 1.102, 2),
-        "potential_savings": round(savings, 2),
-        "active_resources": res_count,
-        "anomalies": db.query(Anomaly).filter_by(organization_id=oid).count(),
-        "cloud_health": health_val,
-        "carbon_kg": round(db.query(func.sum(CarbonRecord.co2_kg)).filter_by(organization_id=oid).scalar() or 0, 2)
-    }
+def dashboard(user=Depends(current_user), db: Session = Depends(get_db), days: int = 30):
+    return get_dashboard_metrics(db, org(user), days=days)
 
 @app.get("/api/cloud/accounts")
 def accounts(user=Depends(current_user),db:Session=Depends(get_db)): return [{"id":a.id,"provider":a.provider,"name":a.name,"identifier":a.identifier,"region":a.region,"status":a.status,"last_sync":a.last_sync} for a in db.query(CloudAccount).filter_by(organization_id=org(user)).all()]
@@ -89,14 +79,97 @@ def resources(user=Depends(current_user),db:Session=Depends(get_db)):
     return [r.__dict__|{} for r in db.query(CloudResource).filter_by(organization_id=org(user)).limit(200).all()]
 
 @app.get("/api/costs/summary")
-def costs(user=Depends(current_user),db:Session=Depends(get_db)):
-    rows=db.query(CostRecord.provider,func.sum(CostRecord.amount)).filter_by(organization_id=org(user)).group_by(CostRecord.provider).all()
-    return {"providers":[{"provider":p,"cost":round(float(v),2)} for p,v in rows]}
+def costs(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    provider: str | None = None,
+    service: str | None = None,
+    region: str | None = None,
+    group_by: str = "provider",
+    user=Depends(current_user),
+    db: Session = Depends(get_db)
+):
+    return get_cost_summary(
+        db,
+        organization_id=org(user),
+        start_date=start_date,
+        end_date=end_date,
+        provider=provider,
+        service=service,
+        region=region,
+        group_by=group_by,
+    )
 
 @app.get("/api/costs")
-def costs_data(user=Depends(current_user),db:Session=Depends(get_db)):
-    rows=db.query(CostRecord.recorded_at,func.sum(CostRecord.amount)).filter_by(organization_id=org(user)).group_by(CostRecord.recorded_at).order_by(CostRecord.recorded_at).all()
-    return [{"date":d.strftime("%Y-%m-%d"),"cost":round(float(v),2)} for d,v in rows]
+def costs_data(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    provider: str | None = None,
+    service: str | None = None,
+    region: str | None = None,
+    user=Depends(current_user),
+    db: Session = Depends(get_db)
+):
+    return get_daily_costs(
+        db,
+        organization_id=org(user),
+        start_date=start_date,
+        end_date=end_date,
+        provider=provider,
+        service=service,
+        region=region,
+    )
+
+@app.get("/api/costs/export")
+def export_costs(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    provider: str | None = None,
+    service: str | None = None,
+    region: str | None = None,
+    user=Depends(current_user),
+    db: Session = Depends(get_db)
+):
+    csv_content, total_cost, count = generate_costs_csv(
+        db,
+        organization_id=org(user),
+        start_date=start_date,
+        end_date=end_date,
+        provider=provider,
+        service=service,
+        region=region,
+    )
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    filename = f"cloudsense_costs_{timestamp}.csv"
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            "X-Total-Cost": f"{total_cost:.2f}",
+            "X-Record-Count": str(count),
+        }
+    )
+
+@app.get("/api/costs/lineage")
+def cost_lineage(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    provider: str | None = None,
+    service: str | None = None,
+    region: str | None = None,
+    user=Depends(current_user),
+    db: Session = Depends(get_db)
+):
+    return get_cost_lineage(
+        db,
+        organization_id=org(user),
+        start_date=start_date,
+        end_date=end_date,
+        provider=provider,
+        service=service,
+        region=region,
+    )
 
 @app.get("/api/forecast")
 def forecast_api(user=Depends(current_user),db:Session=Depends(get_db)):

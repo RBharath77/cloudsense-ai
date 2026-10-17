@@ -1,27 +1,27 @@
 # CloudSense AI — Project Status
 
-Last Updated: Phase 2 Billing CSV Import — COMPLETED
+Last Updated: Phase 3 Dashboard, Cost Explorer, and Data Lineage — COMPLETED
 
 ## 1. System Inventory & Verified Status
 
 | Component | Status | Details |
 |---|---|---|
+| **Cost Aggregation & Explorer Service** | Verified Working (Phase 3) | Authoritative aggregation service (`backend/app/services/cost_aggregation.py`) providing multi-dimensional filtering (provider, service, region, date range), grouping, period-over-period comparison, and data lineage extraction. |
+| **Reconciliation & Export Engine** | Verified Working (Phase 3) | Streaming CSV export endpoint (`/api/costs/export`) guaranteed to match API summary totals 100%. Sanitizes cells against formula injection (`=`, `+`, `-`, `@`, `\t`, `\r`). |
+| **Data Lineage Traceability** | Verified Working (Phase 3) | Lineage endpoint (`/api/costs/lineage`) and UI drawer linking aggregated spend directly back to contributing `BillingImport` batches. |
 | **Billing Ingestion** | Verified Working (Phase 2) | Normalized, transactional CSV ingestion engine (`backend/app/services/billing_import.py`). Supports date formats, amount cleaning, line-numbered validation errors, duplicate file hash detection, and HTTP `Idempotency-Key` replay. |
-| **Import History & Lineage** | Verified Working (Phase 2) | `BillingImport` model tracks status (`COMPLETED`, `FAILED`, `DUPLICATE`), row counts, timestamps, file hash, and JSON error summaries. `CostRecord` enriched with `import_id` and `currency`. |
-| **API Endpoints** | Verified Working | `/api/billing/import`, `/api/billing/imports`, `/api/billing/imports/{id}` fully tested with multi-tenant isolation. |
-| **Frontend UI** | Verified Build | Next.js 15.4.6 / React 19 app. Clean build passed across all 23 static pages (`npm run build`). |
-| **Backend API** | Verified Working | FastAPI 0.116.1 running on Python 3.11.16. |
-| **Test Suite** | Passing (17/17) | `pytest` passes 17/17 tests across `test_auth.py`, `test_dashboard.py`, `test_ml.py`, and `test_billing_import.py`. |
-| **Forecasting & ML** | Verified Working | Polynomial trend with prediction intervals and Isolation Forest anomaly detection. |
-| **Git Version Control** | Active | Branch `phase-2-billing-import` with zero untracked code files. |
+| **Frontend Cost Explorer UI** | Verified Working (Phase 3) | Interactive controls in `frontend/components/Analytics.tsx` for provider filtering, grouping, date range selection, spend breakdown visualization, data lineage drawer, and instant CSV export. Passed clean Next.js build (23/23 static pages). |
+| **Backend API** | Verified Working | FastAPI 0.116.1 running on Python 3.11.16 with tenant-scoped isolation. |
+| **Test Suite** | Passing (23/23) | `pytest` passes 23/23 tests across `test_auth.py`, `test_billing_import.py`, `test_cost_explorer.py`, `test_dashboard.py`, and `test_ml.py`. |
+| **Git Version Control** | Active | Branch `phase-3-dashboard-lineage` with zero untracked code files. |
 
-## 2. Ingestion Guarantees Verified in Phase 2
+## 2. Ingestion & Reconciliation Guarantees Verified
 
-1. **Transactional Integrity:** Any file with validation errors is rejected atomically. Zero partial rows are committed to `CostRecord`.
-2. **Line-Numbered Error Reporting:** Line numbers (e.g. line 3 bad date, line 5 negative cost, line 6 missing service) are mapped directly back to the client.
-3. **Duplicate Prevention:** SHA-256 hash of the CSV file contents ensures re-importing the same file does not double-count records.
-4. **Idempotency Replay:** Re-transmitting requests with the same `Idempotency-Key` header returns HTTP 200 with the original import details without performing duplicate inserts.
-5. **Multi-Tenant Protection:** Organization A can never query or view Organization B's billing imports or records.
+1. **Reconciliation Invariant:** For identical query filters and periods, `api_total_cost == sum(breakdown_items) == sum(csv_export_amount)` to the exact cent.
+2. **Formula Injection Sanitization:** Any CSV cell beginning with `=`, `+`, `-`, `@`, `\t`, or `\r` is escaped with a leading single quote (`'`) to protect spreadsheet applications from remote command execution.
+3. **Data Lineage:** Aggregated cost records retain traceability back to the specific batch `import_id`, file name, row count, and creation timestamp.
+4. **Period-over-Period Delta:** Previous period spend and percentage change (`+X%` or `-X%`) are computed dynamically against identical time windows.
+5. **Zero-Regression Multi-Tenant Isolation:** An empty organization or Organization B cannot see Organization A's spend, breakdown, lineage, or CSV export. Empty queries return HTTP 200 with 0.00 spend and empty arrays, with zero 500 crashes.
 
 ## 3. Test Evidence
 
@@ -32,26 +32,32 @@ rootdir: /Users/BharathR/Downloads/cloudsense-ai
 configfile: pytest.ini
 testpaths: backend/tests
 
-backend/tests/test_auth.py::test_password_hash PASSED                    [  5%]
-backend/tests/test_billing_import.py::test_valid_billing_csv_import PASSED [ 11%]
-backend/tests/test_billing_import.py::test_duplicate_file_rejection PASSED [ 17%]
-backend/tests/test_billing_import.py::test_idempotency_key_replay PASSED [ 23%]
-backend/tests/test_billing_import.py::test_invalid_rows_reporting_and_zero_partial_writes PASSED [ 29%]
-backend/tests/test_billing_import.py::test_empty_csv_rejection PASSED    [ 35%]
-backend/tests/test_billing_import.py::test_missing_required_headers PASSED [ 41%]
-backend/tests/test_billing_import.py::test_multi_tenant_isolation_billing_imports PASSED [ 47%]
-backend/tests/test_dashboard.py::test_health PASSED                      [ 52%]
-backend/tests/test_dashboard.py::test_login_demo_user PASSED             [ 58%]
-backend/tests/test_dashboard.py::test_dashboard_seeded_organization PASSED [ 64%]
-backend/tests/test_dashboard.py::test_dashboard_empty_organization_regression PASSED [ 70%]
-backend/tests/test_dashboard.py::test_forecast_endpoint PASSED           [ 76%]
-backend/tests/test_ml.py::test_forecast PASSED                           [ 82%]
-backend/tests/test_ml.py::test_forecast_multiple_horizons PASSED         [ 88%]
-backend/tests/test_ml.py::test_forecast_insufficient_data PASSED         [ 94%]
+backend/tests/test_auth.py::test_password_hash PASSED                    [  4%]
+backend/tests/test_billing_import.py::test_valid_billing_csv_import PASSED [  8%]
+backend/tests/test_billing_import.py::test_duplicate_file_rejection PASSED [ 13%]
+backend/tests/test_billing_import.py::test_idempotency_key_replay PASSED [ 17%]
+backend/tests/test_billing_import.py::test_invalid_rows_reporting_and_zero_partial_writes PASSED [ 21%]
+backend/tests/test_billing_import.py::test_empty_csv_rejection PASSED    [ 26%]
+backend/tests/test_billing_import.py::test_missing_required_headers PASSED [ 30%]
+backend/tests/test_billing_import.py::test_multi_tenant_isolation_billing_imports PASSED [ 34%]
+backend/tests/test_cost_explorer.py::test_reconciliation_invariant PASSED [ 39%]
+backend/tests/test_cost_explorer.py::test_cost_filtering_and_grouping PASSED [ 43%]
+backend/tests/test_cost_explorer.py::test_cost_data_lineage PASSED       [ 47%]
+backend/tests/test_cost_explorer.py::test_formula_injection_sanitization_in_csv_export PASSED [ 52%]
+backend/tests/test_cost_explorer.py::test_empty_org_costs_and_dashboard PASSED [ 56%]
+backend/tests/test_cost_explorer.py::test_multi_tenant_isolation_costs PASSED [ 60%]
+backend/tests/test_dashboard.py::test_health PASSED                      [ 65%]
+backend/tests/test_dashboard.py::test_login_demo_user PASSED             [ 69%]
+backend/tests/test_dashboard.py::test_dashboard_seeded_organization PASSED [ 73%]
+backend/tests/test_dashboard.py::test_dashboard_empty_organization_regression PASSED [ 78%]
+backend/tests/test_dashboard.py::test_forecast_endpoint PASSED           [ 82%]
+backend/tests/test_ml.py::test_forecast PASSED                           [ 86%]
+backend/tests/test_ml.py::test_forecast_multiple_horizons PASSED         [ 91%]
+backend/tests/test_ml.py::test_forecast_insufficient_data PASSED         [ 95%]
 backend/tests/test_ml.py::test_anomaly PASSED                            [100%]
 
-======================== 17 passed, 4 warnings in 9.09s ========================
+======================= 23 passed, 4 warnings in 11.77s ========================
 ```
 
-## 4. Next Phase: Phase 3 — Dashboard, Cost Explorer, and Data Lineage
-- Target: Unify cost aggregation behind a single service layer; connect dashboard cards, cost trend charts, provider breakdowns, drill-downs, and CSV exports to the authoritative database layer.
+## 4. Next Phase: Phase 4 — Forecasting and Anomaly Detection Engine
+- Target: Build upon the normalized cost records to enhance the forecasting pipeline (handling non-stationary data, daily cadence, trend + seasonality, confidence bands) and unsupervised anomaly detection with financial impact attribution.
