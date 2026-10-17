@@ -1,1 +1,10 @@
-import Shell from '../../components/Shell'; import {Generic} from '../../components/Analytics'; export default function Page(){return <Shell><Generic title="Budget Management" path="/api/budgets"/></Shell>}
+import Shell from '../../components/Shell';
+import { Budgets } from '../../components/Analytics';
+
+export default function Page() {
+  return (
+    <Shell>
+      <Budgets />
+    </Shell>
+  );
+}

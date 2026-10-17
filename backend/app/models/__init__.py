@@ -51,6 +51,7 @@ class CloudResource(Base):
     utilization: Mapped[float]=mapped_column(Float, default=0)
     monthly_cost: Mapped[float]=mapped_column(Float, default=0)
     health: Mapped[float]=mapped_column(Float, default=100)
+    tags: Mapped[str|None]=mapped_column(Text, nullable=True)
 
 class CostRecord(Base):
     __tablename__="cost_records"
@@ -141,10 +142,13 @@ class Budget(Base):
     __tablename__="budgets"
     id: Mapped[str]=mapped_column(String, primary_key=True, default=uid)
     organization_id: Mapped[str]=mapped_column(String, index=True)
+    name: Mapped[str|None]=mapped_column(String, nullable=True)
     scope: Mapped[str]=mapped_column(String)
     target: Mapped[str]=mapped_column(String)
     amount: Mapped[float]=mapped_column(Float)
     threshold: Mapped[float]=mapped_column(Float, default=0.9)
+    period: Mapped[str]=mapped_column(String, default="MONTHLY")
+    created_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)
 
 class Alert(Base):
     __tablename__="alerts"
@@ -154,6 +158,7 @@ class Alert(Base):
     severity: Mapped[str]=mapped_column(String)
     title: Mapped[str]=mapped_column(String)
     message: Mapped[str]=mapped_column(Text)
+    fingerprint: Mapped[str|None]=mapped_column(String, nullable=True, index=True)
     read: Mapped[bool]=mapped_column(Boolean, default=False)
     created_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)
 

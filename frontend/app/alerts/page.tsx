@@ -1,1 +1,10 @@
-import Shell from '../../components/Shell'; import {Generic} from '../../components/Analytics'; export default function Page(){return <Shell><Generic title="Alerts" path="/api/alerts"/></Shell>}
+import Shell from '../../components/Shell';
+import { Alerts } from '../../components/Analytics';
+
+export default function Page() {
+  return (
+    <Shell>
+      <Alerts />
+    </Shell>
+  );
+}

@@ -19,6 +19,19 @@ from .services import (
     get_dashboard_metrics,
     generate_costs_csv,
     get_cost_lineage,
+    evaluate_budget,
+    list_budgets,
+    get_budget_detail,
+    create_budget,
+    update_budget,
+    delete_budget,
+    evaluate_organization_alerts,
+    list_alerts,
+    mark_alert_read,
+    mark_all_alerts_read,
+    delete_alert,
+    evaluate_tag_governance,
+    update_resource_tags,
 )
 
 app=FastAPI(title="CloudSense AI API", version="1.0.0")
@@ -35,6 +48,26 @@ with engine.connect() as _conn:
         _conn.execute(text("ALTER TABLE cost_records ADD COLUMN import_id VARCHAR"))
         _conn.commit()
     except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE budgets ADD COLUMN name VARCHAR"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE budgets ADD COLUMN period VARCHAR DEFAULT 'MONTHLY'"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE budgets ADD COLUMN created_at DATETIME"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE alerts ADD COLUMN fingerprint VARCHAR"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE cloud_resources ADD COLUMN tags TEXT"))
+        _conn.commit()
+    except Exception: pass
 
 @app.on_event("startup")
 def startup():
@@ -46,6 +79,25 @@ def health(): return {"status":"ok","cloud_mode":"mock"}
 class Register(BaseModel): email:str; password:str; role:str="ADMIN"
 class Login(BaseModel): email:str; password:str
 class Chat(BaseModel): message:str
+
+class BudgetCreate(BaseModel):
+    name: str | None = None
+    scope: str = "ORGANIZATION"
+    target: str = "ALL"
+    amount: float
+    threshold: float = 0.9
+    period: str = "MONTHLY"
+
+class BudgetUpdate(BaseModel):
+    name: str | None = None
+    scope: str | None = None
+    target: str | None = None
+    amount: float | None = None
+    threshold: float | None = None
+    period: str | None = None
+
+class ResourceTagsUpdate(BaseModel):
+    tags: dict[str, str]
 
 @app.post("/api/auth/register")
 def register(data:Register,db:Session=Depends(get_db)):
@@ -199,9 +251,77 @@ def sla(user=Depends(current_user),db:Session=Depends(get_db)): return [{k:v for
 @app.get("/api/carbon")
 def carbon(user=Depends(current_user),db:Session=Depends(get_db)): return [{"provider":x.provider,"region":x.region,"service":x.service,"co2_kg":x.co2_kg,"recorded_at":x.recorded_at} for x in db.query(CarbonRecord).filter_by(organization_id=org(user)).all()]
 @app.get("/api/budgets")
-def budgets(user=Depends(current_user),db:Session=Depends(get_db)): return [{k:v for k,v in x.__dict__.items() if not k.startswith('_')} for x in db.query(Budget).filter_by(organization_id=org(user)).all()]
+def get_budgets(user=Depends(current_user), db: Session = Depends(get_db)):
+    return list_budgets(db, org(user))
+
+@app.post("/api/budgets", status_code=201)
+def post_budget(data: BudgetCreate, user=Depends(current_user), db: Session = Depends(get_db)):
+    try:
+        return create_budget(db, org(user), data.model_dump())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.get("/api/budgets/{id}")
+def get_budget(id: str, user=Depends(current_user), db: Session = Depends(get_db)):
+    b = get_budget_detail(db, org(user), id)
+    if not b:
+        raise HTTPException(404, "Budget not found")
+    return b
+
+@app.put("/api/budgets/{id}")
+def put_budget(id: str, data: BudgetUpdate, user=Depends(current_user), db: Session = Depends(get_db)):
+    try:
+        b = update_budget(db, org(user), id, data.model_dump(exclude_unset=True))
+        if not b:
+            raise HTTPException(404, "Budget not found")
+        return b
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.delete("/api/budgets/{id}")
+def remove_budget(id: str, user=Depends(current_user), db: Session = Depends(get_db)):
+    success = delete_budget(db, org(user), id)
+    if not success:
+        raise HTTPException(404, "Budget not found")
+    return {"status": "deleted", "id": id}
+
 @app.get("/api/alerts")
-def alerts(user=Depends(current_user),db:Session=Depends(get_db)): return [{k:v for k,v in x.__dict__.items() if not k.startswith('_')} for x in db.query(Alert).filter_by(organization_id=org(user)).order_by(Alert.created_at.desc()).all()]
+def get_alerts(unread: bool = False, severity: str | None = None, user=Depends(current_user), db: Session = Depends(get_db)):
+    return list_alerts(db, org(user), unread_only=unread, severity=severity)
+
+@app.post("/api/alerts/evaluate")
+def evaluate_alerts(user=Depends(current_user), db: Session = Depends(get_db)):
+    return evaluate_organization_alerts(db, org(user))
+
+@app.post("/api/alerts/{id}/read")
+def read_alert(id: str, user=Depends(current_user), db: Session = Depends(get_db)):
+    success = mark_alert_read(db, org(user), id)
+    if not success:
+        raise HTTPException(404, "Alert not found")
+    return {"status": "marked_read", "id": id}
+
+@app.post("/api/alerts/read-all")
+def read_all_alerts(user=Depends(current_user), db: Session = Depends(get_db)):
+    count = mark_all_alerts_read(db, org(user))
+    return {"status": "marked_all_read", "updated_count": count}
+
+@app.delete("/api/alerts/{id}")
+def remove_alert(id: str, user=Depends(current_user), db: Session = Depends(get_db)):
+    success = delete_alert(db, org(user), id)
+    if not success:
+        raise HTTPException(404, "Alert not found")
+    return {"status": "deleted", "id": id}
+
+@app.get("/api/governance/tags")
+def get_tag_governance(user=Depends(current_user), db: Session = Depends(get_db)):
+    return evaluate_tag_governance(db, org(user))
+
+@app.put("/api/resources/{id}/tags")
+def put_resource_tags(id: str, data: ResourceTagsUpdate, user=Depends(current_user), db: Session = Depends(get_db)):
+    res = update_resource_tags(db, org(user), id, data.tags)
+    if not res:
+        raise HTTPException(404, "Resource not found")
+    return res
 @app.get("/api/rca/{id}")
 def rca(id:str,user=Depends(current_user),db:Session=Depends(get_db)):
     a=db.get(Anomaly,id)
