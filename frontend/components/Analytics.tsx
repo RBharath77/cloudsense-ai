@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api, downloadFile } from '../lib/api';
 import { Page, DataList } from './Page';
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+import { LineChart, Line, AreaChart, Area, BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 
 function Card({
   label,
@@ -1584,4 +1584,682 @@ export function Anomalies() {
     </Page>
   );
 }
+export function CarbonSense() {
+  const [summary, setSummary] = useState<any>(null);
+  const [records, setRecords] = useState<any[]>([]);
+  const [factors, setFactors] = useState<any[]>([]);
+  const [budgets, setBudgets] = useState<any[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  // Filters
+  const [providerFilter, setProviderFilter] = useState<string>('ALL');
+  const [scopeFilter, setScopeFilter] = useState<string>('ALL');
+  const [recordTypeFilter, setRecordTypeFilter] = useState<string>('ALL');
+
+  // CSV Import Modal State
+  const [showImportModal, setShowImportModal] = useState<boolean>(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState<boolean>(false);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [importSuccess, setImportSuccess] = useState<string | null>(null);
+
+  // Budget Modal State
+  const [showBudgetModal, setShowBudgetModal] = useState<boolean>(false);
+  const [newBudgetName, setNewBudgetName] = useState<string>('');
+  const [newBudgetTarget, setNewBudgetTarget] = useState<string>('');
+  const [newBudgetThreshold, setNewBudgetThreshold] = useState<string>('85');
+  const [creatingBudget, setCreatingBudget] = useState<boolean>(false);
+  const [budgetError, setBudgetError] = useState<string | null>(null);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [sumRes, facRes, budRes] = await Promise.all([
+        api('/api/carbon/summary'),
+        api('/api/carbon/factors'),
+        api('/api/carbon/budgets'),
+      ]);
+      setSummary(sumRes);
+      setFactors(facRes);
+      setBudgets(budRes);
+
+      const params = new URLSearchParams();
+      if (providerFilter !== 'ALL') params.set('provider', providerFilter);
+      if (scopeFilter !== 'ALL') params.set('scope', scopeFilter);
+      if (recordTypeFilter !== 'ALL') params.set('record_type', recordTypeFilter);
+      const q = params.toString() ? `?${params.toString()}` : '';
+      const recRes = await api(`/api/carbon${q}`);
+      setRecords(recRes);
+    } catch (err) {
+      console.error('Failed to load CarbonSense data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [providerFilter, scopeFilter, recordTypeFilter]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleImportCsv = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importFile) return;
+    setImporting(true);
+    setImportErrors([]);
+    setImportSuccess(null);
+
+    const formData = new FormData();
+    formData.append('file', importFile);
+
+    try {
+      const res = await api('/api/carbon/import', {
+        method: 'POST',
+        body: formData,
+      });
+      setImportSuccess(`Successfully imported ${res.imported_rows} emissions records (${res.total_co2_kg} kgCO2e).`);
+      setImportFile(null);
+      await loadData();
+      setTimeout(() => {
+        setShowImportModal(false);
+        setImportSuccess(null);
+      }, 1500);
+    } catch (err: any) {
+      if (err.detail && err.detail.errors) {
+        setImportErrors(err.detail.errors);
+      } else {
+        setImportErrors([err.message || 'CSV Import failed']);
+      }
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleCreateBudget = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreatingBudget(true);
+    setBudgetError(null);
+
+    try {
+      await api('/api/carbon/budgets', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: newBudgetName,
+          target_kg: parseFloat(newBudgetTarget),
+          threshold: parseFloat(newBudgetThreshold) / 100.0,
+          period: 'ANNUAL',
+          year: 2026,
+        }),
+      });
+      setNewBudgetName('');
+      setNewBudgetTarget('');
+      setShowBudgetModal(false);
+      await loadData();
+    } catch (err: any) {
+      setBudgetError(err.message || 'Failed to create carbon budget');
+    } finally {
+      setCreatingBudget(false);
+    }
+  };
+
+  const handleDeleteBudget = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this carbon target?')) return;
+    try {
+      await api(`/api/carbon/budgets/${id}`, { method: 'DELETE' });
+      await loadData();
+    } catch (err) {
+      console.error('Failed to delete carbon budget:', err);
+    }
+  };
+
+  const primaryBudget = budgets.length > 0 ? budgets[0] : null;
+
+  return (
+    <Page
+      title="CarbonSense™ — Cloud Emissions Intelligence"
+      subtitle="Source-aware greenhouse gas accounting across AWS, Azure, and GCP. Evaluated using GHG Protocol Scope 1, 2, and 3 standards without deriving figures from financial spend."
+    >
+      {/* Top Action Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-2">
+          <span className="text-xs uppercase font-bold text-emerald-400 tracking-wider flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            Verified Carbon Provenance
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowBudgetModal(true)}
+            className="text-xs px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-medium rounded-lg transition"
+          >
+            + Set Carbon Target
+          </button>
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="text-xs px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-semibold rounded-lg shadow-sm transition flex items-center gap-2"
+          >
+            <span>📄</span>
+            Import Provider Statement
+          </button>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <Card
+          label="Total Cloud Emissions"
+          value={`${(summary?.total_co2_kg ?? 0).toLocaleString()} kgCO₂e`}
+          sub={`${summary?.total_co2_mt ?? 0} Metric Tons CO₂e`}
+          badge={{ text: 'GHG Protocol', color: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' }}
+        />
+        <Card
+          label="Provider-Reported Ratio"
+          value={`${summary?.data_coverage?.reported_ratio_pct ?? 0}%`}
+          sub={`${summary?.data_coverage?.total_records ?? 0} total records tracked`}
+          badge={{ text: 'Data Provenance', color: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' }}
+        />
+        <Card
+          label="Scope 2 Location-Based"
+          value={`${((summary?.scope_breakdown?.find((s: any) => s.scope === 'Scope 2')?.co2_kg) ?? 0).toLocaleString()} kg`}
+          sub="Electricity consumption from grid"
+          badge={{ text: 'Grid Dependent', color: 'bg-blue-500/20 text-blue-300 border border-blue-500/30' }}
+        />
+        <Card
+          label="Active Carbon Target"
+          value={primaryBudget ? `${primaryBudget.percentage_used}%` : 'No Target Set'}
+          sub={primaryBudget ? `${primaryBudget.actual_kg} / ${primaryBudget.target_kg} kg target` : 'Create target to track progress'}
+          badge={{
+            text: primaryBudget ? primaryBudget.status : 'Unmanaged',
+            color: primaryBudget?.status === 'EXCEEDED'
+              ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+              : primaryBudget?.status === 'WARNING'
+              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
+          }}
+        />
+      </div>
+
+      {/* Primary Visualizations: Provider Breakdown & Scope Breakdown */}
+      <div className="grid lg:grid-cols-2 gap-6 mb-6">
+        {/* Cloud Provider Emissions Breakdown */}
+        <div className="panel p-5">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h3 className="font-semibold text-slate-100">Emissions by Cloud Provider</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Footprint attributed across infrastructure providers</p>
+            </div>
+            <span className="text-xs font-mono text-cyan-300">kgCO₂e</span>
+          </div>
+
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={summary?.provider_breakdown || []} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <XAxis dataKey="provider" stroke="#64748b" tick={{ fontSize: 12 }} />
+                <YAxis stroke="#64748b" tick={{ fontSize: 11 }} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '0.5rem', fontSize: '0.75rem' }}
+                  formatter={(val: any) => [`${Number(val).toFixed(2)} kgCO₂e (${(Number(val) / 1000).toFixed(3)} MT)`, 'Emissions']}
+                />
+                <Bar dataKey="co2_kg" radius={[4, 4, 0, 0]}>
+                  {(summary?.provider_breakdown || []).map((entry: any, index: number) => {
+                    const color = entry.provider === 'AWS' ? '#f59e0b' : entry.provider === 'Azure' ? '#0ea5e9' : '#10b981';
+                    return <Cell key={`cell-${index}`} fill={color} />;
+                  })}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Greenhouse Gas Protocol Scopes Breakdown */}
+        <div className="panel p-5">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h3 className="font-semibold text-slate-100">Greenhouse Gas Protocol Scopes</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Classification by emission origination boundary</p>
+            </div>
+            <span className="text-xs font-mono text-emerald-400">GHG Standard</span>
+          </div>
+
+          <div className="space-y-4 pt-2">
+            {[
+              {
+                scope: 'Scope 1 (Direct)',
+                desc: 'Backup generators, onsite cooling, and facilities',
+                val: summary?.scope_breakdown?.find((s: any) => s.scope === 'Scope 1')?.co2_kg || 0,
+                color: 'bg-amber-400',
+              },
+              {
+                scope: 'Scope 2 (Indirect Electricity)',
+                desc: 'Purchased electricity evaluated via regional grid emission factors',
+                val: summary?.scope_breakdown?.find((s: any) => s.scope === 'Scope 2')?.co2_kg || 0,
+                color: 'bg-emerald-400',
+              },
+              {
+                scope: 'Scope 3 (Upstream & Embodied)',
+                desc: 'Hardware manufacturing, server supply chain, and packaging',
+                val: summary?.scope_breakdown?.find((s: any) => s.scope === 'Scope 3')?.co2_kg || 0,
+                color: 'bg-blue-400',
+              },
+            ].map((sc, idx) => {
+              const total = summary?.total_co2_kg || 1;
+              const pct = Math.min(100, Math.round((sc.val / total) * 100));
+              return (
+                <div key={idx} className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <div>
+                      <span className="font-bold text-slate-200">{sc.scope}</span>
+                      <p className="text-[11px] text-slate-500">{sc.desc}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono font-bold text-slate-200">{sc.val.toFixed(2)} kg</span>
+                      <span className="text-[11px] text-slate-400 ml-1.5 font-mono">({pct}%)</span>
+                    </div>
+                  </div>
+                  <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${sc.color}`} style={{ width: `${pct}%` }}></div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Regional Grid Intensity Table */}
+      <div className="panel p-5 mb-6">
+        <div className="flex flex-wrap items-center justify-between mb-4 gap-2">
+          <div>
+            <h3 className="font-semibold text-slate-100">Regional Grid Carbon Intensity Index</h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Published grid factors for workloads; migrating compute to clean regions directly reduces Scope 2 emissions.
+            </p>
+          </div>
+          <span className="text-xs text-slate-500 font-mono">EPA eGRID 2024 / EEA 2023</span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left">
+            <thead className="text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[11px]">
+              <tr>
+                <th className="py-2.5 px-3">Region</th>
+                <th className="py-2.5 px-3">Location</th>
+                <th className="py-2.5 px-3 text-right">Intensity</th>
+                <th className="py-2.5 px-3 text-right">Clean Energy %</th>
+                <th className="py-2.5 px-3">Primary Source Citation</th>
+                <th className="py-2.5 px-3 text-right">Year</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800 text-slate-300">
+              {factors.map((f: any, idx: number) => {
+                const isClean = (f.clean_energy_pct || 0) >= 60;
+                const isMedium = (f.clean_energy_pct || 0) >= 30;
+                return (
+                  <tr key={idx} className="hover:bg-slate-900/40 transition">
+                    <td className="py-2.5 px-3 font-mono font-semibold text-cyan-300">{f.region}</td>
+                    <td className="py-2.5 px-3 text-slate-300">{f.location}</td>
+                    <td className="py-2.5 px-3 text-right font-mono text-slate-200">{f.intensity_g_per_kwh} g/kWh</td>
+                    <td className="py-2.5 px-3 text-right">
+                      <span className={`px-2 py-0.5 rounded-full font-bold font-mono text-[10px] ${
+                        isClean
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          : isMedium
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                      }`}>
+                        {f.clean_energy_pct}%
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-400">
+                      <a href={f.source_url} target="_blank" rel="noreferrer" className="hover:text-cyan-300 underline decoration-slate-700">
+                        {f.source_name}
+                      </a>
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono text-slate-500">{f.year}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Methodology & Data Provenance Disclosure (Criterion 6) */}
+      <div className="panel p-5 mb-6 border-l-4 border-l-emerald-500">
+        <h4 className="font-semibold text-slate-100 text-sm mb-2 flex items-center gap-2">
+          <span>🌿</span>
+          Data Provenance & Calculation Methodology Disclosure
+        </h4>
+        <div className="grid md:grid-cols-2 gap-4 text-xs text-slate-300">
+          <div>
+            <p className="text-slate-400 mb-2">
+              <strong className="text-slate-200">Accounting Protocol: </strong>
+              {summary?.methodology?.standard}
+            </p>
+            <p className="text-slate-400 mb-2">
+              <strong className="text-slate-200">Calculation Engine: </strong>
+              {summary?.methodology?.calculation_framework}
+            </p>
+            <p className="text-slate-400">
+              <strong className="text-slate-200">Source Integrity: </strong>
+              {summary?.methodology?.source_integrity}
+            </p>
+          </div>
+          <div className="p-3 bg-slate-900/60 rounded-lg border border-slate-800">
+            <h5 className="font-bold text-amber-300 uppercase text-[10px] tracking-wider mb-1">
+              Strict Non-Fabrication Guarantee
+            </h5>
+            <p className="text-slate-300 text-[11px] leading-relaxed">
+              {summary?.methodology?.limitations}
+            </p>
+            <div className="mt-2 text-[10px] text-slate-500 font-mono">
+              Energy Model: E(kWh) = [P_idle + util × (P_max - P_idle)] × PUE × (hrs/1000)
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter Toolbar & Emissions Records Ledger */}
+      <div className="panel p-4 mb-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs uppercase font-medium text-slate-400">Provider:</span>
+          <div className="flex bg-slate-900 border border-slate-700 rounded-lg p-1">
+            {['ALL', 'AWS', 'Azure', 'GCP'].map((p) => (
+              <button
+                key={p}
+                onClick={() => setProviderFilter(p)}
+                className={`text-xs px-2.5 py-1 rounded-md font-medium transition ${
+                  providerFilter === p
+                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+
+          <span className="text-xs uppercase font-medium text-slate-400 ml-2">Scope:</span>
+          <div className="flex bg-slate-900 border border-slate-700 rounded-lg p-1">
+            {['ALL', 'Scope 1', 'Scope 2', 'Scope 3'].map((sc) => (
+              <button
+                key={sc}
+                onClick={() => setScopeFilter(sc)}
+                className={`text-xs px-2.5 py-1 rounded-md font-medium transition ${
+                  scopeFilter === sc
+                    ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                {sc}
+              </button>
+            ))}
+          </div>
+
+          <span className="text-xs uppercase font-medium text-slate-400 ml-2">Type:</span>
+          <div className="flex bg-slate-900 border border-slate-700 rounded-lg p-1">
+            {['ALL', 'REPORTED', 'ESTIMATED', 'DEMO'].map((t) => (
+              <button
+                key={t}
+                onClick={() => setRecordTypeFilter(t)}
+                className={`text-xs px-2.5 py-1 rounded-md font-medium transition ${
+                  recordTypeFilter === t
+                    ? 'bg-purple-500 text-white shadow-sm'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button
+          onClick={loadData}
+          disabled={loading}
+          className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200 transition"
+        >
+          {loading ? 'Refreshing…' : 'Refresh Ledger'}
+        </button>
+      </div>
+
+      {/* Detailed Emissions Table */}
+      <div className="panel overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left">
+            <thead className="bg-slate-900/60 text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[11px]">
+              <tr>
+                <th className="py-3 px-4">Date</th>
+                <th className="py-3 px-4">Provider</th>
+                <th className="py-3 px-4">Region</th>
+                <th className="py-3 px-4">Service</th>
+                <th className="py-3 px-4">Scope</th>
+                <th className="py-3 px-4">Provenance Type</th>
+                <th className="py-3 px-4">Source</th>
+                <th className="py-3 px-4 text-right">kgCO₂e</th>
+                <th className="py-3 px-4 text-right">MTCO₂e</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800 text-slate-300">
+              {loading ? (
+                <tr>
+                  <td colSpan={9} className="py-8 text-center text-slate-500">
+                    Loading carbon ledger…
+                  </td>
+                </tr>
+              ) : records.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-8 text-center text-slate-500">
+                    No emissions records match the selected filters.
+                  </td>
+                </tr>
+              ) : (
+                records.map((r: any) => {
+                  const typeColor =
+                    r.record_type === 'REPORTED'
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                      : r.record_type === 'DEMO'
+                      ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                      : 'bg-blue-500/20 text-blue-300 border-blue-500/30';
+
+                  const providerColor =
+                    r.provider === 'AWS'
+                      ? 'text-amber-400'
+                      : r.provider === 'Azure'
+                      ? 'text-sky-400'
+                      : 'text-emerald-400';
+
+                  return (
+                    <tr key={r.id} className="hover:bg-slate-900/40 transition">
+                      <td className="py-3 px-4 font-mono text-slate-400">
+                        {r.recorded_at ? new Date(r.recorded_at).toLocaleDateString() : '—'}
+                      </td>
+                      <td className={`py-3 px-4 font-semibold ${providerColor}`}>{r.provider}</td>
+                      <td className="py-3 px-4 font-mono text-slate-400">{r.region}</td>
+                      <td className="py-3 px-4 text-slate-200">{r.service}</td>
+                      <td className="py-3 px-4 text-slate-300">{r.scope}</td>
+                      <td className="py-3 px-4">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${typeColor}`}>
+                          {r.record_type}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-400 max-w-xs truncate" title={r.source}>
+                        {r.source}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono font-semibold text-slate-100">
+                        {r.co2_kg.toFixed(2)}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono text-slate-400">
+                        {r.co2_mt.toFixed(3)}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* CSV Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in duration-200">
+            <div className="flex justify-between items-start">
+              <div>
+                <span className="text-xs uppercase font-semibold text-emerald-400 tracking-wider">
+                  Provider Statement Ingestion
+                </span>
+                <h3 className="text-lg font-bold text-white mt-1">Import Provider Carbon CSV</h3>
+              </div>
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Upload customer carbon statements from AWS Customer Carbon Footprint Tool, Azure Carbon Optimization, or Google Cloud Carbon Footprint.
+            </p>
+
+            <div className="p-3 bg-slate-950/60 rounded-lg border border-slate-800 text-[11px] font-mono text-slate-400 space-y-1">
+              <div className="text-slate-500 uppercase text-[10px] font-bold font-sans">Required CSV Format:</div>
+              <div className="text-cyan-300">date,provider,region,service,co2_kg,unit,scope,record_type,source</div>
+              <div className="text-slate-500">2026-10-01,AWS,us-east-1,EC2,15.50,kgCO2e,Scope 2,REPORTED,AWS Tool</div>
+            </div>
+
+            {importErrors.length > 0 && (
+              <div className="p-3 bg-rose-950/40 border border-rose-800/60 rounded-lg text-xs text-rose-300 space-y-1 max-h-32 overflow-auto">
+                <div className="font-bold">Validation Errors:</div>
+                {importErrors.map((err, idx) => (
+                  <div key={idx}>• {err}</div>
+                ))}
+              </div>
+            )}
+
+            {importSuccess && (
+              <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded-lg text-xs text-emerald-300 font-medium">
+                ✓ {importSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleImportCsv} className="space-y-4 pt-2">
+              <input
+                type="file"
+                accept=".csv"
+                onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                className="block w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-emerald-300 hover:file:bg-slate-700 cursor-pointer"
+              />
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowImportModal(false)}
+                  className="text-xs px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!importFile || importing}
+                  className="text-xs px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg transition disabled:opacity-50"
+                >
+                  {importing ? 'Validating & Importing…' : 'Upload & Ingest'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Set Carbon Target Modal */}
+      {showBudgetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in duration-200">
+            <div className="flex justify-between items-start">
+              <div>
+                <span className="text-xs uppercase font-semibold text-emerald-400 tracking-wider">
+                  Target Setting
+                </span>
+                <h3 className="text-lg font-bold text-white mt-1">Set Annual Carbon Target</h3>
+              </div>
+              <button
+                onClick={() => setShowBudgetModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {budgetError && (
+              <div className="p-3 bg-rose-950/40 border border-rose-800/60 rounded-lg text-xs text-rose-300">
+                {budgetError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateBudget} className="space-y-4">
+              <div>
+                <label className="block text-xs uppercase font-medium text-slate-400 mb-1">Target Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 2026 Corporate Scope 2 Cap"
+                  value={newBudgetName}
+                  onChange={(e) => setNewBudgetName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase font-medium text-slate-400 mb-1">Target Ceiling (kgCO₂e)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  required
+                  placeholder="e.g. 100.0"
+                  value={newBudgetTarget}
+                  onChange={(e) => setNewBudgetTarget(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase font-medium text-slate-400 mb-1">Warning Threshold (% of Target)</label>
+                <input
+                  type="number"
+                  min="10"
+                  max="100"
+                  required
+                  value={newBudgetThreshold}
+                  onChange={(e) => setNewBudgetThreshold(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowBudgetModal(false)}
+                  className="text-xs px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingBudget}
+                  className="text-xs px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg transition disabled:opacity-50"
+                >
+                  {creatingBudget ? 'Saving…' : 'Establish Target'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </Page>
+  );
+}
+
 export function Assistant(){const [q,setQ]=useState(''),[a,setA]=useState('');return <Page title="CloudSense AI Assistant" subtitle="Answers are grounded in application data; no external LLM is required."><div className="panel p-5 max-w-3xl"><div className="muted text-sm mb-4">Try: “What is my cloud spend?”, “Show critical anomalies”, or “Are there security issues?”</div><div className="flex gap-2"><input value={q} onChange={e=>setQ(e.target.value)} className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2" placeholder="Ask about your cloud…"/><button onClick={async()=>setA((await api('/api/assistant/chat',{method:'POST',body:JSON.stringify({message:q})})).answer)} className="bg-cyan-300 text-slate-950 rounded-lg px-5 font-semibold">Ask AI</button></div>{a&&<div className="mt-5 border border-cyan-300/20 bg-cyan-300/5 rounded-xl p-4">{a}</div>}</div></Page>}

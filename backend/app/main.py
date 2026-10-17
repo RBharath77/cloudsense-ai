@@ -36,6 +36,13 @@ from .services import (
     list_anomalies,
     run_anomaly_detection,
     get_anomaly_rca,
+    list_carbon_factors,
+    get_carbon_summary,
+    list_carbon_records,
+    import_carbon_csv,
+    list_carbon_budgets,
+    create_carbon_budget,
+    delete_carbon_budget,
 )
 
 app=FastAPI(title="CloudSense AI API", version="1.0.0")
@@ -72,6 +79,30 @@ with engine.connect() as _conn:
         _conn.execute(text("ALTER TABLE cloud_resources ADD COLUMN tags TEXT"))
         _conn.commit()
     except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE carbon_records ADD COLUMN source VARCHAR DEFAULT 'Provider Report'"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE carbon_records ADD COLUMN unit VARCHAR DEFAULT 'kgCO2e'"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE carbon_records ADD COLUMN reporting_period VARCHAR"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE carbon_records ADD COLUMN record_type VARCHAR DEFAULT 'ESTIMATED'"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE carbon_records ADD COLUMN scope VARCHAR DEFAULT 'Scope 2'"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE carbon_records ADD COLUMN methodology TEXT"))
+        _conn.commit()
+    except Exception: pass
 
 @app.on_event("startup")
 def startup():
@@ -102,6 +133,13 @@ class BudgetUpdate(BaseModel):
 
 class ResourceTagsUpdate(BaseModel):
     tags: dict[str, str]
+
+class CarbonBudgetCreate(BaseModel):
+    name: str
+    target_kg: float
+    threshold: float = 0.9
+    period: str = "ANNUAL"
+    year: int = 2026
 
 @app.post("/api/auth/register")
 def register(data:Register,db:Session=Depends(get_db)):
@@ -275,8 +313,57 @@ def security(user=Depends(current_user),db:Session=Depends(get_db)):
     return [{k:v for k,v in f.__dict__.items() if not k.startswith('_')} for f in db.query(SecurityFinding).filter_by(organization_id=org(user)).all()]
 @app.get("/api/sla")
 def sla(user=Depends(current_user),db:Session=Depends(get_db)): return [{k:v for k,v in x.__dict__.items() if not k.startswith('_')} for x in db.query(SLARecord).filter_by(organization_id=org(user)).all()]
+@app.get("/api/carbon/summary")
+def get_carbon_summary_api(user=Depends(current_user), db: Session = Depends(get_db)):
+    return get_carbon_summary(db, org(user))
+
 @app.get("/api/carbon")
-def carbon(user=Depends(current_user),db:Session=Depends(get_db)): return [{"provider":x.provider,"region":x.region,"service":x.service,"co2_kg":x.co2_kg,"recorded_at":x.recorded_at} for x in db.query(CarbonRecord).filter_by(organization_id=org(user)).all()]
+def carbon(
+    provider: str | None = None,
+    scope: str | None = None,
+    record_type: str | None = None,
+    limit: int = 100,
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return list_carbon_records(
+        db,
+        org(user),
+        provider=provider,
+        scope=scope,
+        record_type=record_type,
+        limit=limit,
+    )
+
+@app.post("/api/carbon/import")
+def post_carbon_csv(file: UploadFile = File(...), user=Depends(current_user), db: Session = Depends(get_db)):
+    content = file.file.read()
+    res = import_carbon_csv(db, org(user), content)
+    if not res.get("success"):
+        raise HTTPException(400, detail={"errors": res.get("errors", ["Failed to parse carbon CSV."])})
+    return res
+
+@app.get("/api/carbon/factors")
+def get_carbon_factors(user=Depends(current_user)):
+    return list_carbon_factors()
+
+@app.get("/api/carbon/budgets")
+def get_carbon_budgets(user=Depends(current_user), db: Session = Depends(get_db)):
+    return list_carbon_budgets(db, org(user))
+
+@app.post("/api/carbon/budgets", status_code=201)
+def post_carbon_budget(data: CarbonBudgetCreate, user=Depends(current_user), db: Session = Depends(get_db)):
+    try:
+        return create_carbon_budget(db, org(user), data.model_dump())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.delete("/api/carbon/budgets/{id}")
+def delete_carbon_budget_api(id: str, user=Depends(current_user), db: Session = Depends(get_db)):
+    success = delete_carbon_budget(db, org(user), id)
+    if not success:
+        raise HTTPException(404, "Carbon budget not found")
+    return {"status": "deleted", "id": id}
 @app.get("/api/budgets")
 def get_budgets(user=Depends(current_user), db: Session = Depends(get_db)):
     return list_budgets(db, org(user))

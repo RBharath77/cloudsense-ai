@@ -137,6 +137,23 @@ class CarbonRecord(Base):
     service: Mapped[str]=mapped_column(String)
     co2_kg: Mapped[float]=mapped_column(Float)
     recorded_at: Mapped[datetime]=mapped_column(DateTime)
+    source: Mapped[str]=mapped_column(String, default="Provider Report")
+    unit: Mapped[str]=mapped_column(String, default="kgCO2e")
+    reporting_period: Mapped[str|None]=mapped_column(String, nullable=True)
+    record_type: Mapped[str]=mapped_column(String, default="ESTIMATED")
+    scope: Mapped[str]=mapped_column(String, default="Scope 2")
+    methodology: Mapped[str|None]=mapped_column(String, nullable=True)
+
+class CarbonBudget(Base):
+    __tablename__="carbon_budgets"
+    id: Mapped[str]=mapped_column(String, primary_key=True, default=uid)
+    organization_id: Mapped[str]=mapped_column(String, index=True)
+    name: Mapped[str]=mapped_column(String)
+    target_kg: Mapped[float]=mapped_column(Float)
+    threshold: Mapped[float]=mapped_column(Float, default=0.9)
+    period: Mapped[str]=mapped_column(String, default="ANNUAL")
+    year: Mapped[int]=mapped_column(Integer, default=2026)
+    created_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)
 
 class Budget(Base):
     __tablename__="budgets"

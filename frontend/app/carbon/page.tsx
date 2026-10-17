@@ -1,1 +1,10 @@
-import Shell from '../../components/Shell'; import {Generic} from '../../components/Analytics'; export default function Page(){return <Shell><Generic title="Carbon Footprint" path="/api/carbon"/></Shell>}
+import Shell from '../../components/Shell';
+import { CarbonSense } from '../../components/Analytics';
+
+export default function Page() {
+  return (
+    <Shell>
+      <CarbonSense />
+    </Shell>
+  );
+}

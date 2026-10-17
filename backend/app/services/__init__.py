@@ -33,3 +33,12 @@ from .anomaly_service import (
     run_anomaly_detection,
     get_anomaly_rca,
 )
+from .carbon_service import (
+    list_carbon_factors,
+    get_carbon_summary,
+    list_carbon_records,
+    import_carbon_csv,
+    list_carbon_budgets,
+    create_carbon_budget,
+    delete_carbon_budget,
+)
