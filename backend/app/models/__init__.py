@@ -37,6 +37,12 @@ class CloudAccount(Base):
     identifier: Mapped[str]=mapped_column(String)
     region: Mapped[str]=mapped_column(String)
     status: Mapped[str]=mapped_column(String, default="CONNECTED")
+    auth_type: Mapped[str]=mapped_column(String, default="ASSUME_ROLE")
+    credentials_masked: Mapped[str|None]=mapped_column(Text, nullable=True)
+    sync_frequency: Mapped[str]=mapped_column(String, default="DAILY")
+    last_sync_status: Mapped[str|None]=mapped_column(String, default="IDLE")
+    last_sync_error: Mapped[str|None]=mapped_column(Text, nullable=True)
+    records_ingested_count: Mapped[int]=mapped_column(Integer, default=0)
     last_sync: Mapped[datetime|None]=mapped_column(DateTime, nullable=True)
 
 class CloudResource(Base):
@@ -261,6 +267,23 @@ class RevokedToken(Base):
     user_id: Mapped[str|None]=mapped_column(String, index=True, nullable=True)
     revoked_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)
     expires_at: Mapped[datetime]=mapped_column(DateTime)
+
+class CloudSyncJob(Base):
+    __tablename__="cloud_sync_jobs"
+    id: Mapped[str]=mapped_column(String, primary_key=True, default=uid)
+    organization_id: Mapped[str]=mapped_column(String, ForeignKey("organizations.id"), index=True)
+    account_id: Mapped[str]=mapped_column(String, ForeignKey("cloud_accounts.id"), index=True)
+    provider: Mapped[str]=mapped_column(String, index=True)
+    sync_type: Mapped[str]=mapped_column(String, default="BILLING_CUR")
+    status: Mapped[str]=mapped_column(String, default="QUEUED")  # QUEUED | RUNNING | COMPLETED | FAILED
+    records_ingested: Mapped[int]=mapped_column(Integer, default=0)
+    date_range_start: Mapped[datetime|None]=mapped_column(DateTime, nullable=True)
+    date_range_end: Mapped[datetime|None]=mapped_column(DateTime, nullable=True)
+    is_simulated: Mapped[bool]=mapped_column(Boolean, default=True)
+    simulation_disclosure: Mapped[str|None]=mapped_column(Text, nullable=True)
+    error_message: Mapped[str|None]=mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)
+    completed_at: Mapped[datetime|None]=mapped_column(DateTime, nullable=True)
 
 class BillingImport(Base):
     __tablename__="billing_imports"

@@ -74,3 +74,11 @@ from .security_service import (
     update_workspace_profile,
     ALLOWED_ROLES,
 )
+from .connector_service import (
+    connect_cloud_account,
+    list_cloud_accounts,
+    get_cloud_account_detail,
+    trigger_account_sync,
+    list_account_sync_jobs,
+    disconnect_cloud_account,
+)

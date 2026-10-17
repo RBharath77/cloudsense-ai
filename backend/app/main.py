@@ -64,6 +64,12 @@ from .services import (
     deactivate_workspace_user,
     get_workspace_profile,
     update_workspace_profile,
+    connect_cloud_account,
+    list_cloud_accounts,
+    get_cloud_account_detail,
+    trigger_account_sync,
+    list_account_sync_jobs,
+    disconnect_cloud_account,
 )
 
 app=FastAPI(title="CloudSense AI API", version="1.0.0")
@@ -196,6 +202,30 @@ with engine.connect() as _conn:
         _conn.execute(text("ALTER TABLE chat_messages ADD COLUMN sources TEXT"))
         _conn.commit()
     except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE cloud_accounts ADD COLUMN auth_type VARCHAR DEFAULT 'DEFAULT'"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE cloud_accounts ADD COLUMN credentials_masked TEXT"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE cloud_accounts ADD COLUMN sync_frequency VARCHAR DEFAULT 'DAILY'"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE cloud_accounts ADD COLUMN last_sync_status VARCHAR DEFAULT 'IDLE'"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE cloud_accounts ADD COLUMN last_sync_error TEXT"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE cloud_accounts ADD COLUMN records_ingested_count INTEGER DEFAULT 0"))
+        _conn.commit()
+    except Exception: pass
 
 @app.on_event("startup")
 def startup():
@@ -207,6 +237,19 @@ def health(): return {"status":"ok","cloud_mode":"mock"}
 class Register(BaseModel): email:str; password:str; role:str="ADMIN"
 class Login(BaseModel): email:str; password:str
 class Chat(BaseModel): message:str
+
+class CloudAccountConnectRequest(BaseModel):
+    provider: str
+    name: str
+    identifier: str
+    region: str
+    auth_type: str = "DEFAULT"
+    credentials: dict[str, Any] | None = None
+    sync_frequency: str = "DAILY"
+
+class CloudAccountSyncRequest(BaseModel):
+    sync_type: str = "BILLING_CUR"
+    days: int = 30
 
 class BudgetCreate(BaseModel):
     name: str | None = None
@@ -352,13 +395,88 @@ def dashboard(user=Depends(current_user), db: Session = Depends(get_db), days: i
     return get_dashboard_metrics(db, org(user), days=days)
 
 @app.get("/api/cloud/accounts")
-def accounts(user=Depends(current_user),db:Session=Depends(get_db)): return [{"id":a.id,"provider":a.provider,"name":a.name,"identifier":a.identifier,"region":a.region,"status":a.status,"last_sync":a.last_sync} for a in db.query(CloudAccount).filter_by(organization_id=org(user)).all()]
+def get_accounts(user=Depends(current_user), db: Session = Depends(get_db)):
+    return list_cloud_accounts(db, org(user))
+
+@app.post("/api/cloud/accounts")
+def create_account(
+    data: CloudAccountConnectRequest,
+    user=Depends(require_roles("ADMIN", "FINOPS_ENGINEER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return connect_cloud_account(
+            db,
+            organization_id=org(user),
+            user_id=user.id,
+            provider=data.provider,
+            name=data.name,
+            identifier=data.identifier,
+            region=data.region,
+            auth_type=data.auth_type,
+            credentials=data.credentials,
+            sync_frequency=data.sync_frequency,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/cloud/accounts/{id}")
+def get_account_detail(
+    id: str,
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return get_cloud_account_detail(db, org(user), id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 @app.post("/api/cloud/accounts/{id}/sync")
-def sync(id:str,user=Depends(current_user),db:Session=Depends(get_db)):
-    a=db.get(CloudAccount,id)
-    if not a or a.organization_id!=org(user): raise HTTPException(404,"Account not found")
-    a.last_sync=datetime.utcnow(); db.add(AuditLog(organization_id=org(user),user_id=user.id,action="cloud_sync",status="success",detail=a.provider)); db.commit(); return {"status":"simulated_sync_complete","demo":True}
+def sync_account(
+    id: str,
+    payload: CloudAccountSyncRequest | None = None,
+    user=Depends(require_roles("ADMIN", "FINOPS_ENGINEER")),
+    db: Session = Depends(get_db),
+):
+    sync_type = payload.sync_type if payload else "BILLING_CUR"
+    days = payload.days if payload else 30
+    try:
+        return trigger_account_sync(
+            db,
+            organization_id=org(user),
+            user_id=user.id,
+            account_id=id,
+            sync_type=sync_type,
+            days=days,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.get("/api/cloud/accounts/{id}/jobs")
+def get_account_jobs(
+    id: str,
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return list_account_sync_jobs(db, org(user), account_id=id)
+
+@app.get("/api/cloud/sync/jobs")
+def get_all_sync_jobs(
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return list_account_sync_jobs(db, org(user))
+
+@app.delete("/api/cloud/accounts/{id}")
+def remove_account(
+    id: str,
+    user=Depends(require_roles("ADMIN")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return disconnect_cloud_account(db, org(user), user.id, id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 @app.get("/api/resources")
 def resources(user=Depends(current_user),db:Session=Depends(get_db)):

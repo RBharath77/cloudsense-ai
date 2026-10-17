@@ -1,20 +1,25 @@
 # CloudSense AI — Project Status
 
-Last Updated: Phase 7 Optimization, Savings Ledger, and What-If Simulator — COMPLETED
+Last Updated: Phase 10 Multi-Cloud Connectors and Data Ingestion Pipeline — COMPLETED
 
 ## 1. System Inventory & Verified Status
 
 | Component | Status | Details |
 |---|---|---|
+| **Multi-Cloud Connector Adapters** | Verified Working (Phase 10) | Pluggable connector adapters (`backend/app/providers/`) for AWS, Azure, and GCP. Structurally validates IAM Role ARNs (`arn:aws:iam::\d{12}:role/...`), External IDs, Azure Service Principal UUIDs (Tenant, Client, Subscription), and GCP Service Account project slugs and emails. |
+| **Automated Ingestion Pipeline & Sync Jobs** | Verified Working (Phase 10) | Automated background sync pipeline (`backend/app/services/connector_service.py`) tracking executions via `CloudSyncJob` (`QUEUED` -> `RUNNING` -> `COMPLETED`/`FAILED`). Guarantees idempotent upsert into `CostRecord` with zero duplication. |
+| **Non-Fabricated Benchmark Telemetry & Transparency** | Verified Working (Phase 10) | Strict non-fabrication adherence: when live cloud API sockets are absent, connections validate credential syntax, activate "CONNECTED (Simulated / Non-Fabricated Telemetry Mode)", and explicitly disclose `is_simulated: true` with zero fabricated socket calls. Raw credentials securely masked. |
+| **Frontend UI (Multi-Cloud Connectors Manager)** | Verified Working (Phase 10) | Full-featured UI in `frontend/components/CloudConnectorsManager.tsx` mounted at `/cloud-accounts` featuring provider health cards (AWS, Azure, GCP), connect account modal with validation, accounts table with "Sync Now", and sync jobs drawer. Statically generated via Next.js 15 with 0 errors. |
+| **FinOps Role-Based Access Control (RBAC)** | Verified Working (Phase 9) | Strict role enforcement across `ADMIN`, `FINOPS_ENGINEER`, `AUDITOR`, and `VIEWER`. Connect and sync endpoints restricted to `ADMIN` and `FINOPS_ENGINEER`; account deletion restricted to `ADMIN`. Viewers/auditors have read-only access. |
+| **Session Security & Token Revocation** | Verified Working (Phase 9) | JWT cryptographic JTI session revocation (`POST /api/auth/logout`) blacklisting tokens in `RevokedToken` table. |
+| **Structured Audit Trail Engine** | Verified Working (Phase 9) | Protected query API `GET /api/audit/logs` with action/status filtering accessible exclusively to `ADMIN` and `AUDITOR`. |
 | **Evidence-Backed Recommendation Engine** | Verified Working (Phase 7) | Telemetry-grounded recommendation service (`backend/app/services/optimization_service.py`) analyzing actual resource CPU/memory metrics and time-series. Enforces strict non-fabrication: zero utilization claims without real telemetry data. |
 | **Multi-Objective Priority Scoring Engine** | Verified Working (Phase 7) | Transparent scoring engine supporting 4 selectable priorities (`BALANCE`, `COST`, `EMISSIONS`, `RISK_AVOIDANT`). Returns explicit scoring weights and formulas in API metadata. |
 | **Read-Only What-If Scenario Simulator** | Verified Working (Phase 7) | Interactive scenario simulator supporting fleet rightsizing, off-hours shutdown schedules, 1-yr/3-yr Savings Plans, and green regional grid migration. Strictly read-only: records scenario inputs, pricing catalogs (AWS/Azure 2025), assumptions, and outputs in `SimulationScenario` without mutating live cloud resources. |
 | **Verified Savings Ledger** | Verified Working (Phase 7) | Authoritative savings tracking model (`SavingsLedger`) distinguishing expected forecast savings from verified post-implementation measurements. Calculates realization rate (%), tracks measurement windows, and records operational caveats. |
-| **Frontend UI (Optimization & Simulator)** | Verified Working (Phase 7) | Full-featured UI in `frontend/components/OptimizationEngine.tsx` and `frontend/app/optimization/page.tsx` featuring priority toggles with live weight badges, expandable evidence/assumptions accordion, interactive scenario what-if modeler with before/after comparisons, and verified savings ledger table. Next.js production build cleanly compiled (23/23 static pages). |
 | **CarbonSense™ Intelligence Engine** | Verified Working (Phase 6) | Source-aware greenhouse gas accounting (`backend/app/services/carbon_service.py`) supporting Scope 1, Scope 2 (market/location-based), and Scope 3 classification per GHG Protocol. Evaluates footprint without deriving emissions from financial spend. |
 | **Regional Grid Intensity Factors Registry** | Verified Working (Phase 6) | Authoritative factor registry citing published benchmarks (EPA eGRID 2024, EEA 2023, Fingrid) mapping regional intensity (gCO2e/kWh) and clean energy percentages across cloud regions. |
 | **Multi-Horizon ML Forecasting Engine** | Verified Working (Phase 5) | Trend forecasting model (`backend/app/services/forecast_service.py` & `backend/app/ml.py`) supporting multi-horizon forecasting (7D–90D), provider filtering, dynamic confidence intervals (80%/95%), and non-negative clamping. |
-| **Model Registry & Zero-Leakage Backtesting** | Verified Working (Phase 5) | Chronological backtest evaluation ($t < split$ train, $t \ge split$ test) evaluating MAE, RMSE, and benchmark comparison against a strict Naive Persistence Baseline (`improvement_pct`). |
 | **Isolation Forest Anomaly Engine & RCA** | Verified Working (Phase 5) | Unsupervised anomaly detection (`backend/app/services/anomaly_service.py`) evaluating residual deviations against learned median envelopes with financial impact calculation and deterministic Root Cause Analysis. |
 | **Persistent Budget Engine** | Verified Working (Phase 4) | Full CRUD service (`backend/app/services/budget_service.py`) supporting Organization, Provider, and Service scopes, configurable alert thresholds, live spend aggregation, and burn-rate projections. |
 | **Deduplicated Alert Engine** | Verified Working (Phase 4) | Alert evaluation engine (`backend/app/services/alert_service.py`) with fingerprint-based SHA-256 deduplication: `sha256(org:entity:type:period)`. |
@@ -23,8 +28,8 @@ Last Updated: Phase 7 Optimization, Savings Ledger, and What-If Simulator — CO
 | **Reconciliation & Export Engine** | Verified Working (Phase 3) | Streaming CSV export endpoint (`/api/costs/export`) guaranteed to match API summary totals 100%. Sanitizes cells against formula injection (`=`, `+`, `-`, `@`, `\t`, `\r`). |
 | **Billing Ingestion** | Verified Working (Phase 2) | Normalized, transactional CSV ingestion engine (`backend/app/services/billing_import.py`) with SHA-256 duplicate rejection and idempotency replay. |
 | **Backend API** | Verified Working | FastAPI 0.116.1 running on Python 3.11.16 with tenant-scoped isolation. |
-| **Test Suite** | Passing (57/57) | `pytest` passes 57/57 tests across all 9 test suites (`test_auth.py`, `test_billing_import.py`, `test_cost_explorer.py`, `test_budgets_alerts.py`, `test_dashboard.py`, `test_forecast_anomalies.py`, `test_carbonsense.py`, `test_ml.py`, and `test_optimization_simulator.py`). |
-| **Git Version Control** | Active | Branch `phase-7-optimization-simulator` with clean diff. |
+| **Test Suite** | Passing (87/87) | `pytest` passes 87/87 tests across all 12 test suites with 0 failures. |
+| **Git Version Control** | Active | Branch `phase-10-multicloud-connectors-ingestion` with clean diff. |
 
 ## 2. Optimization, Simulator & Ledger Invariants Verified
 
@@ -147,5 +152,36 @@ backend/tests/test_optimization_simulator.py::test_multi_tenant_isolation_optimi
 
 ---
 
-## 6. Next Phase: Phase 10 — Multi-Cloud Connectors and Data Ingestion Pipeline
-- **Target**: Production-grade multi-cloud credential validation, automated billing data sync adapters for AWS Cost & Usage Reports (CUR), Azure Cost Management exports, and GCP BigQuery billing exports, with idempotent background ingestion jobs.
+## 6. Completed: Phase 10 — Multi-Cloud Connectors and Data Ingestion Pipeline
+- **Branch**: `phase-10-multicloud-connectors-ingestion`
+- **Core Capabilities Delivered**:
+  - **Multi-Cloud Connector Adapters**: Built extensible `BaseCloudConnector` framework with specialized adapters for AWS, Azure, and GCP (`backend/app/providers/`).
+  - **Structural Credential Validation**: Enforces rigorous regex and structural validation:
+    - AWS: Validates 12-digit IAM Role ARNs (`arn:aws:iam::\d{12}:role/...`) with mandatory multi-tenant External ID, or 20-char Access Key IDs (`AKIA...`) with 20+ char Secret Keys.
+    - Azure: Validates Service Principal Tenant UUIDs, Client UUIDs, Subscription UUIDs, and Client Secrets.
+    - GCP: Validates Google Cloud Project ID slugs and Service Account emails (`<account-name>@<project-id>.iam.gserviceaccount.com`).
+  - **Zero Raw Secret Exposure**: Sensitive credentials are never persisted in raw form. All credentials stored in `credentials_masked` are sanitized, with secret keys completely redacted (`****************`).
+  - **Idempotent Ingestion Pipeline**: Ingestion synchronizes normalized provider telemetry directly into `CostRecord` with strict date/resource matching, eliminating duplicate rows upon re-runs.
+  - **Audit & Ingestion Job Tracking**: Tracks lifecycle of each synchronization through `CloudSyncJob` (`QUEUED` -> `RUNNING` -> `COMPLETED`/`FAILED`), recording records ingested count, start/end dates, and errors.
+  - **Transparent Non-Fabrication Disclosure**: When live cloud API secrets are unconfigured, connections and jobs activate *"CONNECTED (Simulated / Non-Fabricated Telemetry Mode)"* and explicitly flag `is_simulated: true` with non-fabrication disclosure notes.
+  - **FinOps Role-Based Access Control**:
+    - `POST /api/cloud/accounts` & `POST /api/cloud/accounts/{id}/sync`: restricted to `ADMIN` and `FINOPS_ENGINEER`.
+    - `DELETE /api/cloud/accounts/{id}`: restricted to `ADMIN`.
+    - `GET /api/cloud/accounts` & `GET /api/cloud/accounts/{id}/jobs`: accessible to all authenticated workspace members.
+  - **Interactive Frontend UI**: Built `CloudConnectorsManager.tsx` mounted at `/cloud-accounts` with provider health cards, connect account modal with real-time validation, accounts table with "Sync Now" button, and sync execution history drawer.
+
+### Automated Test Verification:
+```bash
+.venv/bin/pytest backend/tests/test_multicloud_connectors.py -v
+======================== 8 passed, 4 warnings in 11.21s ========================
+
+.venv/bin/pytest backend/tests -q
+87 passed, 10 warnings in 56.12s
+```
+- Total test suites: 12 (`test_multicloud_connectors.py`, `test_security_identity_collaboration.py`, `test_ai_analyst_reporting.py`, `test_optimization_simulator.py`, `test_forecast_anomalies.py`, `test_carbonsense.py`, `test_cost_explorer.py`, `test_budgets_alerts.py`, `test_billing_import.py`, `test_dashboard.py`, `test_auth.py`, `test_ml.py`).
+- Frontend Build: `npm run build` completed successfully (`/cloud-accounts` statically generated to 9.55 kB with 0 errors).
+
+---
+
+## 7. Next Phase: Phase 11 — Anomaly Detection and Automated Action Engine
+- **Target**: Real-time anomaly alerting webhooks, automated remediation triggers (with human-in-the-loop approval workflows), and auto-scaling cost safety fences.
