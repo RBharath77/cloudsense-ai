@@ -108,3 +108,18 @@ from .action_service import (
     rollback_action,
     ALLOWED_ACTION_TYPES,
 )
+from .iac_service import (
+    parse_and_analyze_terraform_plan,
+    list_terraform_analyses,
+    get_terraform_analysis_detail,
+    evaluate_ci_cd_policies,
+    estimate_resource_pricing,
+    DEFAULT_POLICIES,
+    INSTANCE_CATALOG_RATES,
+)
+from .container_finops_service import (
+    get_kubernetes_allocations,
+    get_kubernetes_cluster_summary,
+    ingest_kubernetes_allocations,
+    calculate_workload_efficiency,
+)

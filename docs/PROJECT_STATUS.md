@@ -1,11 +1,14 @@
 # CloudSense AI — Project Status
 
-Last Updated: Phase 11 Background Jobs, Health & Observability, and Automated Action Engine — COMPLETED
+Last Updated: Phase 12 Infrastructure-as-Code (Terraform) Cost & Carbon Estimator and Container FinOps — COMPLETED
 
 ## 1. System Inventory & Verified Status
 
 | Component | Status | Details |
 |---|---|---|
+| **Shift-Left Terraform Cost & Carbon Analyzer** | Verified Working (Phase 12) | Pre-deployment Terraform Plan JSON parser and diff engine (`backend/app/services/iac_service.py`). Evaluates resource changes (`create`, `update`, `delete`), calculates monthly cost deltas ($\Delta \$ / \text{mo}$) from benchmark catalogs, computes carbon footprint deltas ($\Delta kgCO_2e / \text{mo}$) using regional grid emission factors (EPA eGRID 2024 / EEA 2023), and enforces CI/CD pull request policies (`PASSED`, `WARNING`, `BLOCKED`). |
+| **Kubernetes & Container FinOps Allocation** | Verified Working (Phase 12) | Multi-tenant cluster allocation engine (`backend/app/services/container_finops_service.py`). Breaks down costs across namespaces and workloads (`Deployment`, `StatefulSet`, `DaemonSet`, `Job`), calculates active utilized spend vs. idle overprovisioned waste, computes Cluster Efficiency Score (%), and exposes Prometheus/cAdvisor telemetry ingestion. |
+| **Frontend UI (Shift-Left IaC & Container Console)** | Verified Working (Phase 12) | Full-featured UI in `frontend/components/IaCKubernetesFinOps.tsx` mounted at `/iac` with dual-tab navigation: Shift-Left Terraform Estimator (JSON input, demo presets, diff cards, policy breakdown) and Kubernetes Container FinOps (cluster efficiency gauge, namespace cost bars, and workloads inventory). Statically generated with Next.js 15 (0 errors across 25 routes). |
 | **System Observability & Health Engine** | Verified Working (Phase 11) | Real DB latency ping, disk storage accessibility, process memory RSS telemetry, uptime tracking. Accessible via `/health` (backwards-compatible JSON), `/health/detailed` (RBAC `ADMIN`, `AUDITOR`), Prometheus `/metrics` exporter, and `/api/system/observability`. |
 | **Reliable Background Job Runner** | Verified Working (Phase 11) | Asynchronous task execution pipeline (`backend/app/services/job_service.py`) tracking states (`QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, `CANCELLED`). Executes periodic/on-demand sweeps: `ANOMALY_SWEEP`, `BUDGET_AUDIT`, `STORAGE_ORPHAN_SCAN`, and `SCHEDULED_CONNECTOR_SYNC`. |
 | **Cryptographic Webhook Dispatcher** | Verified Working (Phase 11) | Outbound notification engine (`backend/app/services/webhook_service.py`) delivering signed event payloads (`ANOMALY_DETECTED`, `BUDGET_BREACH`, `ACTION_PROPOSED`, `SYSTEM_ALERT`) with HMAC-SHA256 cryptographic signatures (`X-CloudSense-Signature: sha256=...`) and delivery audit logging (`WebhookDeliveryLog`). |
@@ -33,8 +36,8 @@ Last Updated: Phase 11 Background Jobs, Health & Observability, and Automated Ac
 | **Reconciliation & Export Engine** | Verified Working (Phase 3) | Streaming CSV export endpoint (`/api/costs/export`) guaranteed to match API summary totals 100%. Sanitizes cells against formula injection (`=`, `+`, `-`, `@`, `\t`, `\r`). |
 | **Billing Ingestion** | Verified Working (Phase 2) | Normalized, transactional CSV ingestion engine (`backend/app/services/billing_import.py`) with SHA-256 duplicate rejection and idempotency replay. |
 | **Backend API** | Verified Working | FastAPI 0.116.1 running on Python 3.11.16 with tenant-scoped isolation. |
-| **Test Suite** | Passing (95/95) | `pytest` passes 95/95 tests across all 13 test suites with 0 failures. |
-| **Git Version Control** | Active | Branch `phase-11-anomaly-detection-automated-actions` with clean diff. |
+| **Test Suite** | Passing (104/104) | `pytest` passes 104/104 tests across all 14 test suites with 0 failures. |
+| **Git Version Control** | Active | Branch `phase-12-iac-terraform-container-finops` with clean diff. |
 
 ## 2. Optimization, Simulator & Ledger Invariants Verified
 
@@ -219,5 +222,34 @@ backend/tests/test_optimization_simulator.py::test_multi_tenant_isolation_optimi
 
 ---
 
-## 8. Next Phase: Phase 12 — Infrastructure-as-Code (Terraform) Cost & Carbon Estimator and Container FinOps
-- **Target**: Pre-deployment Terraform plan JSON cost & carbon diff analyzer, Kubernetes / container resource allocation, and CI/CD pull request budget policy fences.
+## 8. Completed: Phase 12 — Infrastructure-as-Code (Terraform) Cost & Carbon Estimator and Container FinOps
+- **Branch**: `phase-12-iac-terraform-container-finops`
+- **Core Capabilities Delivered**:
+  - **Shift-Left Terraform Cost & Carbon Diff Analyzer**:
+    - Parses standard Terraform Plan JSON (`resource_changes` array with `actions`, `type`, `before`, `after`).
+    - Calculates projected monthly cost before vs proposed monthly cost after, resulting in pre-deployment cost delta ($\Delta \$ / \text{mo}$).
+    - Calculates pre-deployment carbon footprint before vs after using hardware wattage and regional grid intensity factors (EPA eGRID 2024 / EEA 2023 / CCF) $\to$ Monthly Carbon Delta ($\Delta kgCO_2e / \text{mo}$).
+    - Enforces CI/CD pull request policies (`PASSED`, `WARNING`, `BLOCKED`) checking budget limits, disallowed expensive instance types (e.g. `p4d.24xlarge`), and mandatory FinOps tags (`Environment`, `Owner`).
+  - **Kubernetes & Container FinOps Cost Allocation**:
+    - Tracks multi-tenant cluster workloads across namespaces and workload types (`Deployment`, `StatefulSet`, `DaemonSet`, `Job`).
+    - Measures **Allocated Application Cost** vs **Idle / Overprovisioned Waste Cost** based on CPU millicores and memory requests vs actual utilization.
+    - Computes Cluster Cost Efficiency Score (%) with interactive namespace breakdowns and demonstration benchmark telemetry.
+    - Exposes container telemetry ingestion API (`POST /api/containers/kubernetes/ingest`).
+  - **Interactive Frontend UI**: Built `IaCKubernetesFinOps.tsx` mounted at `/iac` with dual-tab interface, plan JSON editor with demo presets, diff cards, policy breakdown, namespace distribution bars, and workload inventory.
+  - **Automated Test Suite**: Created `test_iac_container_finops.py` (9/9 passed).
+
+### Automated Test Verification:
+```bash
+.venv/bin/pytest backend/tests/test_iac_container_finops.py -v
+======================== 9 passed, 0 warnings in 17.18s ========================
+
+.venv/bin/pytest -v
+================= 104 passed, 10 warnings in 81.26s (0:01:21) ==================
+```
+- Total test suites: 14 (`test_iac_container_finops.py`, `test_background_jobs_observability.py`, `test_multicloud_connectors.py`, `test_security_identity_collaboration.py`, `test_ai_analyst_reporting.py`, `test_optimization_simulator.py`, `test_forecast_anomalies.py`, `test_carbonsense.py`, `test_cost_explorer.py`, `test_budgets_alerts.py`, `test_billing_import.py`, `test_dashboard.py`, `test_auth.py`, `test_ml.py`).
+- Frontend Build: `npm run build` completed successfully (`/iac` statically generated to 9.83 kB with 0 errors across 25 routes).
+
+---
+
+## 9. Next Phase: Phase 13 — Release Readiness, Master Integration, and Final Verification
+- **Target**: Production environment verification, zero unmasked secrets audit, full end-to-end user journeys, clean installation and seed checks, documentation synchronization, and release delivery.

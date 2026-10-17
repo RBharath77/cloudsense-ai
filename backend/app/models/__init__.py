@@ -396,3 +396,41 @@ class AutomatedAction(Base):
     proposed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     executed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+class TerraformPlanAnalysis(Base):
+    __tablename__ = "terraform_plan_analyses"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=uid)
+    organization_id: Mapped[str] = mapped_column(String, ForeignKey("organizations.id"), index=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    plan_name: Mapped[str] = mapped_column(String)
+    provider: Mapped[str] = mapped_column(String, default="aws")
+    resources_created: Mapped[int] = mapped_column(Integer, default=0)
+    resources_updated: Mapped[int] = mapped_column(Integer, default=0)
+    resources_deleted: Mapped[int] = mapped_column(Integer, default=0)
+    monthly_cost_before_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    monthly_cost_after_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    monthly_cost_delta_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    monthly_emissions_delta_kgco2e: Mapped[float] = mapped_column(Float, default=0.0)
+    policy_status: Mapped[str] = mapped_column(String, default="PASSED")  # PASSED | WARNING | BLOCKED
+    policy_violations: Mapped[str] = mapped_column(Text, default="[]")     # JSON list of violations
+    raw_plan_summary: Mapped[str] = mapped_column(Text, default="{}")      # JSON summary of resource changes
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class KubernetesCostAllocation(Base):
+    __tablename__ = "kubernetes_cost_allocations"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=uid)
+    organization_id: Mapped[str] = mapped_column(String, ForeignKey("organizations.id"), index=True)
+    cluster_name: Mapped[str] = mapped_column(String, default="production-eks-cluster")
+    namespace: Mapped[str] = mapped_column(String, index=True)
+    workload_name: Mapped[str] = mapped_column(String)
+    workload_type: Mapped[str] = mapped_column(String, default="Deployment")  # Deployment | StatefulSet | DaemonSet
+    cpu_allocated_cores: Mapped[float] = mapped_column(Float, default=1.0)
+    cpu_usage_cores: Mapped[float] = mapped_column(Float, default=0.4)
+    memory_allocated_bytes: Mapped[float] = mapped_column(Float, default=4294967296.0)  # 4 GiB
+    memory_usage_bytes: Mapped[float] = mapped_column(Float, default=2147483648.0)     # 2 GiB
+    efficiency_score: Mapped[float] = mapped_column(Float, default=50.0)                # percentage
+    monthly_allocated_cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    monthly_idle_cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    is_simulated: Mapped[bool] = mapped_column(Boolean, default=True)
+    recorded_date: Mapped[str] = mapped_column(String)  # YYYY-MM-DD
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

@@ -87,6 +87,12 @@ from .services import (
     approve_and_execute_action,
     reject_action,
     rollback_action,
+    parse_and_analyze_terraform_plan,
+    list_terraform_analyses,
+    get_terraform_analysis_detail,
+    get_kubernetes_allocations,
+    get_kubernetes_cluster_summary,
+    ingest_kubernetes_allocations,
 )
 
 _APP_START_TIME = time.time()
@@ -1556,3 +1562,100 @@ def rollback_action_api(
         return rollback_action(db, org(user), user.id, id)
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+# ==========================================
+# Phase 12: IaC Terraform & Container FinOps
+# ==========================================
+
+class TerraformAnalyzeRequest(BaseModel):
+    plan_data: dict[str, Any]
+    plan_name: str | None = None
+    policies: dict[str, Any] | None = None
+
+class KubernetesIngestRequest(BaseModel):
+    cluster_name: str = "production-eks-cluster"
+    recorded_date: str | None = None
+    allocations: list[dict[str, Any]]
+
+@app.post("/api/iac/terraform/analyze")
+def analyze_terraform_plan_api(
+    data: TerraformAnalyzeRequest,
+    user=Depends(require_roles("ADMIN", "FINOPS_ENGINEER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        analysis = parse_and_analyze_terraform_plan(
+            db,
+            organization_id=org(user),
+            user_id=user.id,
+            plan_payload=data.plan_data,
+            plan_name=data.plan_name,
+            policies=data.policies,
+        )
+        return get_terraform_analysis_detail(db, org(user), analysis.id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Terraform plan analysis failed: {str(e)}")
+
+@app.get("/api/iac/terraform/analyses")
+def list_terraform_analyses_api(
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return list_terraform_analyses(db, org(user))
+
+@app.get("/api/iac/terraform/analyses/{id}")
+def get_terraform_analysis_api(
+    id: str,
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    res = get_terraform_analysis_detail(db, org(user), id)
+    if not res:
+        raise HTTPException(404, f"Terraform analysis '{id}' not found.")
+    return res
+
+@app.get("/api/containers/kubernetes/allocations")
+def get_kubernetes_allocations_api(
+    cluster_name: str | None = None,
+    namespace: str | None = None,
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return get_kubernetes_allocations(
+        db,
+        organization_id=org(user),
+        cluster_name=cluster_name,
+        namespace=namespace,
+    )
+
+@app.get("/api/containers/kubernetes/summary")
+def get_kubernetes_summary_api(
+    cluster_name: str | None = None,
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return get_kubernetes_cluster_summary(
+        db,
+        organization_id=org(user),
+        cluster_name=cluster_name,
+    )
+
+@app.post("/api/containers/kubernetes/ingest")
+def ingest_kubernetes_allocations_api(
+    data: KubernetesIngestRequest,
+    user=Depends(require_roles("ADMIN", "FINOPS_ENGINEER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        payload = {
+            "cluster_name": data.cluster_name,
+            "recorded_date": data.recorded_date,
+            "allocations": data.allocations,
+        }
+        return ingest_kubernetes_allocations(db, org(user), user.id, payload)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Kubernetes allocation ingest failed: {str(e)}")
