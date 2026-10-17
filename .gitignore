@@ -8,3 +8,5 @@ cloudsense.db
 .DS_Store
 .venv/
 .pytest_cache/
+backend/storage/reports/*
+!backend/storage/reports/.gitkeep

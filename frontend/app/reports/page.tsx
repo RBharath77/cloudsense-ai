@@ -1,2 +1,18 @@
-'use client'; import Shell from '../../components/Shell'; import {Page} from '../../components/Page'; import {useState} from 'react'; import {api} from '../../lib/api';
-export default function Reports(){const [msg,setMsg]=useState('');const generate=async()=>{try{const x=await api('/api/reports/generate',{method:'POST'});setMsg('Report generated successfully.');window.open((process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000')+x.download,'_blank')}catch(e:any){setMsg(e.message)}};return <Shell><Page title="Reports" subtitle="Generate an executive PDF from the current application data."><div className="panel p-6 max-w-xl"><h3 className="font-medium">Executive Cloud Intelligence Report</h3><p className="muted text-sm mt-2">Includes spend, forecast, anomalies, optimization, security, SLA and carbon snapshot.</p><button onClick={generate} className="mt-5 bg-cyan-300 text-slate-950 px-5 py-2.5 rounded-lg font-semibold">Generate PDF</button>{msg&&<p className="mt-4 text-emerald-300 text-sm">{msg}</p>}</div></Page></Shell>}
+'use client';
+
+import Shell from '../../components/Shell';
+import { Page } from '../../components/Page';
+import { ReportsManager } from '../../components/ReportsManager';
+
+export default function ReportsPage() {
+  return (
+    <Shell>
+      <Page
+        title="Executive Reports & Digests"
+        subtitle="Database-reconciled FinOps intelligence digests in PDF & sanitized CSV formats."
+      >
+        <ReportsManager />
+      </Page>
+    </Shell>
+  );
+}

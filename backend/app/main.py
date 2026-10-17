@@ -7,6 +7,7 @@ from sqlalchemy import func
 from datetime import datetime, timedelta
 import os
 import json
+from typing import Any
 from .database import Base, engine, get_db
 from .models import *
 from .auth import *
@@ -49,6 +50,12 @@ from .services import (
     get_savings_ledger_summary,
     get_savings_ledger_entries,
     create_savings_ledger_entry,
+    process_analyst_query,
+    get_analyst_tools_registry,
+    create_and_run_report,
+    schedule_digest_job,
+    list_organization_reports,
+    list_organization_report_jobs,
 )
 
 app=FastAPI(title="CloudSense AI API", version="1.0.0")
@@ -133,6 +140,30 @@ with engine.connect() as _conn:
         _conn.execute(text("ALTER TABLE optimization_recommendations ADD COLUMN monthly_carbon_saving_kg FLOAT DEFAULT 0.0"))
         _conn.commit()
     except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE reports ADD COLUMN report_type VARCHAR DEFAULT 'EXECUTIVE_DIGEST'"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE reports ADD COLUMN format VARCHAR DEFAULT 'PDF'"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE reports ADD COLUMN period_days INTEGER DEFAULT 30"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE reports ADD COLUMN file_size_bytes INTEGER DEFAULT 0"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE reports ADD COLUMN parameters TEXT"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE chat_messages ADD COLUMN sources TEXT"))
+        _conn.commit()
+    except Exception: pass
 
 @app.on_event("startup")
 def startup():
@@ -207,6 +238,21 @@ class SavingsLedgerUpdate(BaseModel):
     measurement_window_end: str | None = None
     caveats: str | None = None
     notes: str | None = None
+
+class ChatQuery(BaseModel):
+    message: str
+    session_id: str | None = None
+
+class ReportGenerateRequest(BaseModel):
+    report_type: str = "EXECUTIVE_DIGEST"
+    format: str = "PDF"
+    period_days: int = 30
+    parameters: dict[str, Any] | None = None
+
+class DigestJobRequest(BaseModel):
+    job_type: str = "EXECUTIVE_DIGEST"
+    delivery_channel: str = "DOWNLOAD"
+    period_days: int = 30
 
 @app.post("/api/auth/register")
 def register(data:Register,db:Session=Depends(get_db)):
@@ -670,29 +716,54 @@ def scaling(user=Depends(current_user),db:Session=Depends(get_db)):
     return [{"resource":r.name,"current_capacity":2,"predicted_capacity":3 if r.utilization>75 else 2,"expected_traffic":round(r.utilization*100),"recommendation":"Scale before predicted peak" if r.utilization>75 else "Capacity is currently adequate","expected_cost":round(r.monthly_cost*(1.5 if r.utilization>75 else 1),2)} for r in rs]
 
 @app.post("/api/assistant/chat")
-def assistant(data:Chat,user=Depends(current_user),db:Session=Depends(get_db)):
-    q=data.message.lower(); oid=org(user); summary=dashboard(user,db)
-    if "spend" in q or "cost" in q: answer=f"Your current demo cloud spend is ${summary['current_month_spend']:,.0f}. Potential savings are ${summary['potential_savings']:,.0f}/month."
-    elif "anomal" in q: answer=f"There are {summary['anomalies']} open anomalies. I can drill into provider, resource and financial impact."
-    elif "save" in q or "optim" in q: answer=f"The optimization engine identifies about ${summary['potential_savings']:,.0f}/month in estimated savings."
-    elif "security" in q: answer=f"There are {db.query(SecurityFinding).filter_by(organization_id=oid,status='OPEN').count()} open security findings in demo data."
-    elif "carbon" in q: answer=f"Estimated emissions are {summary['carbon_kg']:.1f} kg CO₂ in the seeded demo snapshot."
-    else: answer="I can answer questions about cloud spend, resources, anomalies, optimization, security, SLA and carbon using the application's live database data."
-    return {"answer":answer,"mode":"deterministic_application_data"}
+def assistant_chat(data: ChatQuery, user=Depends(current_user), db: Session = Depends(get_db)):
+    return process_analyst_query(db, org(user), user.id, data.message, session_id=data.session_id)
+
+@app.get("/api/assistant/tools")
+def assistant_tools(user=Depends(current_user)):
+    return get_analyst_tools_registry()
 
 @app.post("/api/reports/generate")
-def report(user=Depends(current_user),db:Session=Depends(get_db)):
-    from reportlab.pdfgen import canvas
-    path=f"/tmp/cloudsense-{user.id}.pdf"; s=dashboard(user,db); c=canvas.Canvas(path); c.setTitle("CloudSense AI Report"); y=800
-    c.setFont("Helvetica-Bold",18); c.drawString(50,y,"CloudSense AI — Executive Report"); y-=35; c.setFont("Helvetica",11)
-    for k,v in s.items(): c.drawString(60,y,f"{k.replace('_',' ').title()}: {v}"); y-=20
-    c.drawString(60,y,"Demo values are generated from the seeded mock cloud environment."); c.save()
-    r=Report(organization_id=org(user),name="Executive Report",file_path=path); db.add(r); db.commit(); return {"id":r.id,"download":"/api/reports/download/"+r.id,"status":"generated"}
-@app.get("/api/reports/download/{id}")
-def download_report(id:str,user=Depends(current_user),db:Session=Depends(get_db)):
-    r=db.get(Report,id)
-    if not r or r.organization_id!=org(user): raise HTTPException(404,"Report not found")
-    return FileResponse(r.file_path,media_type="application/pdf",filename="cloudsense-report.pdf")
+def generate_report(data: ReportGenerateRequest, user=Depends(current_user), db: Session = Depends(get_db)):
+    try:
+        return create_and_run_report(
+            db,
+            org(user),
+            user.id,
+            report_type=data.report_type,
+            report_format=data.format,
+            period_days=data.period_days,
+            parameters=data.parameters,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Report generation failed: {str(e)}")
+
+@app.get("/api/reports")
+def get_reports(user=Depends(current_user), db: Session = Depends(get_db)):
+    return list_organization_reports(db, org(user))
+
+@app.get("/api/reports/{id}/download")
+def download_report(id: str, user=Depends(current_user), db: Session = Depends(get_db)):
+    r = db.get(Report, id)
+    if not r or r.organization_id != org(user):
+        raise HTTPException(404, "Report not found")
+    if not r.file_path or not os.path.exists(r.file_path):
+        raise HTTPException(404, "Report file not found on server")
+    media_type = "text/csv" if r.format == "CSV" else "application/pdf"
+    ext = "csv" if r.format == "CSV" else "pdf"
+    return FileResponse(r.file_path, media_type=media_type, filename=f"cloudsense-report-{r.id[:8]}.{ext}")
+
+@app.post("/api/reports/digest/schedule")
+def schedule_digest(data: DigestJobRequest, user=Depends(current_user), db: Session = Depends(get_db)):
+    try:
+        payload = data.model_dump() if hasattr(data, "model_dump") else data.dict()
+        return schedule_digest_job(db, org(user), user.id, payload)
+    except Exception as e:
+        raise HTTPException(500, f"Digest scheduling failed: {str(e)}")
+
+@app.get("/api/reports/jobs")
+def get_report_jobs(user=Depends(current_user), db: Session = Depends(get_db)):
+    return list_organization_report_jobs(db, org(user))
 
 @app.post("/api/billing/import")
 async def import_billing_csv(

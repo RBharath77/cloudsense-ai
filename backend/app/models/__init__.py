@@ -207,6 +207,7 @@ class ChatMessage(Base):
     session_id: Mapped[str]=mapped_column(String, index=True)
     role: Mapped[str]=mapped_column(String)
     content: Mapped[str]=mapped_column(Text)
+    sources: Mapped[str|None]=mapped_column(Text, nullable=True)
     created_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)
 
 class Report(Base):
@@ -214,9 +215,28 @@ class Report(Base):
     id: Mapped[str]=mapped_column(String, primary_key=True, default=uid)
     organization_id: Mapped[str]=mapped_column(String, index=True)
     name: Mapped[str]=mapped_column(String)
+    report_type: Mapped[str]=mapped_column(String, default="EXECUTIVE_DIGEST")
+    format: Mapped[str]=mapped_column(String, default="PDF")
+    period_days: Mapped[int]=mapped_column(Integer, default=30)
+    file_size_bytes: Mapped[int]=mapped_column(Integer, default=0)
+    parameters: Mapped[str|None]=mapped_column(Text, nullable=True)
     status: Mapped[str]=mapped_column(String, default="GENERATED")
     file_path: Mapped[str|None]=mapped_column(String, nullable=True)
     created_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)
+
+class ReportJob(Base):
+    __tablename__="report_jobs"
+    id: Mapped[str]=mapped_column(String, primary_key=True, default=uid)
+    organization_id: Mapped[str]=mapped_column(String, index=True)
+    user_id: Mapped[str]=mapped_column(String)
+    report_id: Mapped[str|None]=mapped_column(String, nullable=True)
+    job_type: Mapped[str]=mapped_column(String, default="EXECUTIVE_DIGEST")
+    status: Mapped[str]=mapped_column(String, default="QUEUED")  # QUEUED | RUNNING | SUCCEEDED | FAILED
+    delivery_channel: Mapped[str]=mapped_column(String, default="DOWNLOAD")  # DOWNLOAD | EMAIL_SIMULATED | WEBHOOK
+    delivery_status: Mapped[str]=mapped_column(String, default="READY_FOR_DOWNLOAD")
+    error_message: Mapped[str|None]=mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)
+    completed_at: Mapped[datetime|None]=mapped_column(DateTime, nullable=True)
 
 class AuditLog(Base):
     __tablename__="audit_logs"

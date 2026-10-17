@@ -106,5 +106,26 @@ backend/tests/test_optimization_simulator.py::test_multi_tenant_isolation_optimi
 ======================= 57 passed, 10 warnings in 25.42s =======================
 ```
 
-## 4. Next Phase: Phase 8 — Grounded AI Analyst and Reporting
-- Target: Grounded AI Analyst querying allowlisted backend functions (zero generated arbitrary SQL or shell commands), server-side cross-workspace access denial, and database-reconciled executive reporting.
+## 4. Completed: Phase 8 — Grounded AI Analyst and Reporting Engine
+- **Branch**: `phase-8-ai-analyst-reporting`
+- **Core Capabilities Delivered**:
+  - **Allowlisted Tool Execution**: Deterministic query dispatcher using 7 strictly bounded functions (`get_cost_summary`, `get_forecast`, `get_anomalies`, `get_carbon_summary`, `get_optimization_recommendations`, `get_budgets_summary`, `get_security_findings`). Zero arbitrary SQL generation or shell command execution.
+  - **Multi-Tenant Cross-Workspace Access Denial**: Assistant chat queries, report generation, report download, and background digest jobs strictly verify tenant authorization at the API route and service layer. Cross-tenant inspection returns 404.
+  - **Provenance Citations & Missing Data Acknowledgment**: All analyst responses cite authoritative data sources, tools invoked, observation period, and record counts. Empty organizations explicitly receive missing data acknowledgments instead of hallucinated metrics.
+  - **100% Database-Reconciled Executive Reports**: Executive PDF digest generated via ReportLab and CSV summaries reconciled against authoritative billing imports, CarbonSense hardware models, and priority-scored optimization recommendations.
+  - **CSV Formula Injection Mitigation**: All CSV cell exports sanitize executable formulas (`=`, `+`, `-`, `@`, `\t`, `\r`) by prefixing `'`.
+  - **Background Digest Lifecycle & Transparent Disclosure**: `ReportJob` lifecycle (`QUEUED` -> `RUNNING` -> `SUCCEEDED`/`FAILED`) with honest delivery disclosure (`DELIVERED_SIMULATED (No SMTP server configured)`).
+  - **Interactive Frontend Surfaces**: `AIAnalyst` component with conversation thread, prompt chips, allowlisted tools registry drawer, and collapsible telemetry provenance; `ReportsManager` component with format/period selectors, reports archive, and digest jobs tracker.
+
+### Automated Test Verification:
+```bash
+.venv/bin/pytest backend/tests -v
+======================= 69 passed, 10 warnings in 26.96s =======================
+```
+- Total test suites: 10 (`test_ai_analyst_reporting.py`, `test_optimization_simulator.py`, `test_forecast_anomalies.py`, `test_carbonsense.py`, `test_cost_explorer.py`, `test_budgets_alerts.py`, `test_billing_import.py`, `test_dashboard.py`, `test_auth.py`, `test_ml.py`).
+- Frontend Build: `npm run build` completed successfully (`/assistant` and `/reports` statically generated with 0 errors).
+
+---
+
+## 5. Next Phase: Phase 9 — Security, Identity, and Collaboration
+- **Target**: Fine-grained Role-Based Access Control (RBAC) across FinOps roles (Admin, FinOps Engineer, Auditor, Viewer), session security (revocation, token replay protection), audit event streaming, and workspace collaboration workflows.
