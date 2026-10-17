@@ -43,6 +43,12 @@ from .services import (
     list_carbon_budgets,
     create_carbon_budget,
     delete_carbon_budget,
+    get_recommendations_with_priority,
+    run_what_if_simulation,
+    get_simulation_scenarios,
+    get_savings_ledger_summary,
+    get_savings_ledger_entries,
+    create_savings_ledger_entry,
 )
 
 app=FastAPI(title="CloudSense AI API", version="1.0.0")
@@ -103,6 +109,30 @@ with engine.connect() as _conn:
         _conn.execute(text("ALTER TABLE carbon_records ADD COLUMN methodology TEXT"))
         _conn.commit()
     except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE optimization_recommendations ADD COLUMN category VARCHAR DEFAULT 'RIGHTSIZING'"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE optimization_recommendations ADD COLUMN action TEXT"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE optimization_recommendations ADD COLUMN evidence TEXT"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE optimization_recommendations ADD COLUMN assumptions TEXT"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE optimization_recommendations ADD COLUMN trade_offs TEXT"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE optimization_recommendations ADD COLUMN monthly_carbon_saving_kg FLOAT DEFAULT 0.0"))
+        _conn.commit()
+    except Exception: pass
 
 @app.on_event("startup")
 def startup():
@@ -140,6 +170,43 @@ class CarbonBudgetCreate(BaseModel):
     threshold: float = 0.9
     period: str = "ANNUAL"
     year: int = 2026
+
+class SimulationRequest(BaseModel):
+    scenario_type: str = "RECOMMENDATION"
+    name: str | None = None
+    recommendation_id: str | None = None
+    downsize_percentage: float | None = 40.0
+    target_resource_count: int | None = None
+    off_hours_per_week: float | None = 56.0
+    term_years: int | None = 1
+    coverage_pct: float | None = 75.0
+    target_region: str | None = "us-west-2"
+    payment_option: str | None = "NO_UPFRONT"
+
+class SavingsLedgerCreate(BaseModel):
+    title: str
+    resource_id: str = "res-manual"
+    recommendation_id: str | None = None
+    category: str = "RIGHTSIZING"
+    savings_type: str = "EXPECTED"
+    status: str = "PLANNED"
+    expected_monthly_cost_saving: float = 0.0
+    expected_monthly_carbon_saving_kg: float = 0.0
+    verified_cost_saving: float = 0.0
+    verified_carbon_saving_kg: float = 0.0
+    measurement_window_start: str | None = None
+    measurement_window_end: str | None = None
+    caveats: str | None = None
+    notes: str | None = None
+
+class SavingsLedgerUpdate(BaseModel):
+    status: str | None = None
+    verified_cost_saving: float | None = None
+    verified_carbon_saving_kg: float | None = None
+    measurement_window_start: str | None = None
+    measurement_window_end: str | None = None
+    caveats: str | None = None
+    notes: str | None = None
 
 @app.post("/api/auth/register")
 def register(data:Register,db:Session=Depends(get_db)):
@@ -299,14 +366,169 @@ def detect_anomalies(
     return run_anomaly_detection(db, org(user), contamination=contamination)
 
 @app.get("/api/optimization")
-def optimization(user=Depends(current_user),db:Session=Depends(get_db)):
-    return [{"id":r.id,"resource_id":r.resource_id,"current_cost":r.current_cost,"problem":r.problem,"recommendation":r.recommendation,"monthly_saving":r.monthly_saving,"yearly_saving":r.yearly_saving,"risk":r.risk,"confidence":r.confidence,"action_status":r.action_status} for r in db.query(Recommendation).filter_by(organization_id=org(user)).all()]
+def optimization(
+    priority: str = "BALANCE",
+    category: str | None = None,
+    action_status: str | None = None,
+    legacy: bool = False,
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    data = get_recommendations_with_priority(
+        db,
+        org(user),
+        priority=priority,
+        category=category,
+        action_status=action_status,
+    )
+    if legacy:
+        return data["recommendations"]
+    return data
+
+@app.get("/api/optimization/recommendations/{id}")
+def get_recommendation_detail(id: str, user=Depends(current_user), db: Session = Depends(get_db)):
+    r = db.get(Recommendation, id)
+    if not r or r.organization_id != org(user):
+        raise HTTPException(404, "Recommendation not found")
+    parsed_evidence = None
+    if r.evidence:
+        try:
+            parsed_evidence = json.loads(r.evidence)
+        except Exception:
+            parsed_evidence = {"raw": r.evidence}
+    return {
+        "id": r.id,
+        "resource_id": r.resource_id,
+        "category": r.category or "RIGHTSIZING",
+        "current_cost": r.current_cost,
+        "problem": r.problem,
+        "action": r.action or r.recommendation,
+        "recommendation": r.recommendation,
+        "monthly_saving": r.monthly_saving,
+        "yearly_saving": r.yearly_saving,
+        "monthly_carbon_saving_kg": r.monthly_carbon_saving_kg or 0.0,
+        "risk": r.risk,
+        "confidence": r.confidence,
+        "action_status": r.action_status,
+        "evidence": parsed_evidence,
+        "assumptions": r.assumptions,
+        "trade_offs": r.trade_offs,
+    }
 
 @app.post("/api/optimization/{id}/simulate")
-def simulate(id:str,user=Depends(current_user),db:Session=Depends(get_db)):
-    r=db.get(Recommendation,id)
-    if not r or r.organization_id!=org(user): raise HTTPException(404,"Recommendation not found")
-    r.action_status="SIMULATED"; db.add(AuditLog(organization_id=org(user),user_id=user.id,action="recommendation_simulation",status="success",detail=r.id)); db.commit(); return {"status":"simulation_successful","message":"DEMO / SIMULATION: no real cloud resource was modified."}
+def simulate(id: str, user=Depends(current_user), db: Session = Depends(get_db)):
+    r = db.get(Recommendation, id)
+    if not r or r.organization_id != org(user):
+        raise HTTPException(404, "Recommendation not found")
+    r.action_status = "SIMULATED"
+    db.commit()
+    sim_result = run_what_if_simulation(
+        db,
+        org(user),
+        user.id,
+        {
+            "scenario_type": "RECOMMENDATION",
+            "name": f"Simulation: {r.category} for {r.resource_id}",
+            "recommendation_id": r.id,
+        },
+    )
+    return {
+        "status": "simulation_successful",
+        "message": "DEMO / SIMULATION: no real cloud resource was modified.",
+        "simulation": sim_result,
+    }
+
+@app.post("/api/optimization/simulate")
+def simulate_scenario(
+    data: SimulationRequest,
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return run_what_if_simulation(db, org(user), user.id, data.dict())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.get("/api/optimization/simulations")
+def list_simulations(user=Depends(current_user), db: Session = Depends(get_db)):
+    return get_simulation_scenarios(db, org(user))
+
+@app.get("/api/optimization/simulations/{id}")
+def get_simulation(id: str, user=Depends(current_user), db: Session = Depends(get_db)):
+    scenario = db.get(SimulationScenario, id)
+    if not scenario or scenario.organization_id != org(user):
+        raise HTTPException(404, "Simulation scenario not found")
+    return {
+        "id": scenario.id,
+        "name": scenario.name,
+        "scenario_type": scenario.scenario_type,
+        "created_at": scenario.created_at.isoformat(),
+        "pricing_source": scenario.pricing_source,
+        "factor_source": scenario.factor_source,
+        "inputs": json.loads(scenario.inputs) if scenario.inputs else {},
+        "assumptions": json.loads(scenario.assumptions) if scenario.assumptions else {},
+        "results": json.loads(scenario.results) if scenario.results else {},
+    }
+
+@app.get("/api/optimization/ledger/summary")
+def get_savings_summary(user=Depends(current_user), db: Session = Depends(get_db)):
+    return get_savings_ledger_summary(db, org(user))
+
+@app.get("/api/optimization/ledger")
+def list_savings_ledger(
+    status: str | None = None,
+    savings_type: str | None = None,
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return get_savings_ledger_entries(
+        db,
+        org(user),
+        status=status,
+        savings_type=savings_type,
+    )
+
+@app.post("/api/optimization/ledger")
+def create_savings_entry(
+    data: SavingsLedgerCreate,
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return create_savings_ledger_entry(db, org(user), data.dict())
+
+@app.patch("/api/optimization/ledger/{id}")
+def update_savings_entry(
+    id: str,
+    data: SavingsLedgerUpdate,
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    entry = db.get(SavingsLedger, id)
+    if not entry or entry.organization_id != org(user):
+        raise HTTPException(404, "Savings ledger entry not found")
+    if data.status:
+        entry.status = data.status.upper()
+    if data.verified_cost_saving is not None:
+        entry.verified_cost_saving = float(data.verified_cost_saving)
+    if data.verified_carbon_saving_kg is not None:
+        entry.verified_carbon_saving_kg = float(data.verified_carbon_saving_kg)
+    if data.caveats is not None:
+        entry.caveats = data.caveats
+    if data.notes is not None:
+        entry.notes = data.notes
+    if data.measurement_window_start:
+        try:
+            entry.measurement_window_start = datetime.fromisoformat(data.measurement_window_start)
+        except Exception:
+            pass
+    if data.measurement_window_end:
+        try:
+            entry.measurement_window_end = datetime.fromisoformat(data.measurement_window_end)
+        except Exception:
+            pass
+    entry.updated_at = datetime.utcnow()
+    db.commit()
+    return {"status": "updated", "id": entry.id}
 
 @app.get("/api/security")
 def security(user=Depends(current_user),db:Session=Depends(get_db)):

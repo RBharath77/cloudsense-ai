@@ -103,6 +103,12 @@ class Recommendation(Base):
     risk: Mapped[str]=mapped_column(String)
     confidence: Mapped[float]=mapped_column(Float)
     action_status: Mapped[str]=mapped_column(String, default="PENDING")
+    category: Mapped[str|None]=mapped_column(String, nullable=True, default="RIGHTSIZING")
+    action: Mapped[str|None]=mapped_column(Text, nullable=True)
+    evidence: Mapped[str|None]=mapped_column(Text, nullable=True)
+    assumptions: Mapped[str|None]=mapped_column(Text, nullable=True)
+    trade_offs: Mapped[str|None]=mapped_column(Text, nullable=True)
+    monthly_carbon_saving_kg: Mapped[float|None]=mapped_column(Float, nullable=True, default=0.0)
 
 class SecurityFinding(Base):
     __tablename__="security_findings"
@@ -237,3 +243,38 @@ class BillingImport(Base):
     errors_summary: Mapped[str|None]=mapped_column(Text, nullable=True)
     created_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime|None]=mapped_column(DateTime, nullable=True)
+
+class SavingsLedger(Base):
+    __tablename__="savings_ledger"
+    id: Mapped[str]=mapped_column(String, primary_key=True, default=uid)
+    organization_id: Mapped[str]=mapped_column(String, index=True)
+    recommendation_id: Mapped[str|None]=mapped_column(String, nullable=True)
+    resource_id: Mapped[str]=mapped_column(String)
+    title: Mapped[str]=mapped_column(String)
+    category: Mapped[str]=mapped_column(String, default="RIGHTSIZING")
+    savings_type: Mapped[str]=mapped_column(String, default="EXPECTED")  # EXPECTED | VERIFIED
+    status: Mapped[str]=mapped_column(String, default="PLANNED")  # PLANNED | REALIZED | DEVIATED | REVERTED
+    expected_monthly_cost_saving: Mapped[float]=mapped_column(Float, default=0.0)
+    expected_monthly_carbon_saving_kg: Mapped[float]=mapped_column(Float, default=0.0)
+    verified_cost_saving: Mapped[float]=mapped_column(Float, default=0.0)
+    verified_carbon_saving_kg: Mapped[float]=mapped_column(Float, default=0.0)
+    measurement_window_start: Mapped[datetime|None]=mapped_column(DateTime, nullable=True)
+    measurement_window_end: Mapped[datetime|None]=mapped_column(DateTime, nullable=True)
+    caveats: Mapped[str|None]=mapped_column(Text, nullable=True)
+    notes: Mapped[str|None]=mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class SimulationScenario(Base):
+    __tablename__="simulation_scenarios"
+    id: Mapped[str]=mapped_column(String, primary_key=True, default=uid)
+    organization_id: Mapped[str]=mapped_column(String, index=True)
+    user_id: Mapped[str]=mapped_column(String)
+    name: Mapped[str]=mapped_column(String)
+    scenario_type: Mapped[str]=mapped_column(String, default="RECOMMENDATION")  # RECOMMENDATION | RIGHTSIZING | SCHEDULED_IDLE | SAVINGS_PLAN | REGION_MIGRATION
+    inputs: Mapped[str]=mapped_column(Text)  # JSON serialized parameters
+    assumptions: Mapped[str]=mapped_column(Text)  # JSON serialized assumptions
+    pricing_source: Mapped[str]=mapped_column(String, default="AWS On-Demand Catalog 2025")
+    factor_source: Mapped[str]=mapped_column(String, default="EPA eGRID 2024")
+    results: Mapped[str]=mapped_column(Text)  # JSON serialized results
+    created_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)

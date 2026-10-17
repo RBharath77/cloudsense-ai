@@ -42,3 +42,13 @@ from .carbon_service import (
     create_carbon_budget,
     delete_carbon_budget,
 )
+from .optimization_service import (
+    get_recommendations_with_priority,
+    run_what_if_simulation,
+    get_simulation_scenarios,
+    get_savings_ledger_summary,
+    get_savings_ledger_entries,
+    create_savings_ledger_entry,
+    calculate_priority_score,
+    PRIORITY_CONFIGS,
+)
