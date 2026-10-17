@@ -32,6 +32,10 @@ from .services import (
     delete_alert,
     evaluate_tag_governance,
     update_resource_tags,
+    generate_cost_forecast,
+    list_anomalies,
+    run_anomaly_detection,
+    get_anomaly_rca,
 )
 
 app=FastAPI(title="CloudSense AI API", version="1.0.0")
@@ -224,14 +228,37 @@ def cost_lineage(
     )
 
 @app.get("/api/forecast")
-def forecast_api(user=Depends(current_user),db:Session=Depends(get_db)):
-    rows=db.query(CostRecord.recorded_at,func.sum(CostRecord.amount)).filter_by(organization_id=org(user)).group_by(CostRecord.recorded_at).order_by(CostRecord.recorded_at).all()
-    result=forecast([float(v) for _,v in rows],30)
-    return result
+def forecast_api(
+    horizon: int = Query(30, ge=1, le=180),
+    provider: str | None = None,
+    confidence: float = Query(0.95, ge=0.5, le=0.99),
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return generate_cost_forecast(
+        db,
+        organization_id=org(user),
+        horizon=horizon,
+        provider=provider,
+        confidence_level=confidence,
+    )
 
 @app.get("/api/anomalies")
-def anomalies(user=Depends(current_user),db:Session=Depends(get_db)):
-    return [{"id":a.id,"provider":a.provider,"resource_id":a.resource_id,"metric":a.metric,"severity":a.severity,"timestamp":a.timestamp,"score":a.score,"financial_impact":a.financial_impact,"reason":a.reason,"recommendation":a.recommendation} for a in db.query(Anomaly).filter_by(organization_id=org(user)).order_by(Anomaly.timestamp.desc()).all()]
+def anomalies(
+    severity: str | None = None,
+    provider: str | None = None,
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return list_anomalies(db, org(user), severity=severity, provider=provider)
+
+@app.post("/api/anomalies/detect")
+def detect_anomalies(
+    contamination: float = Query(0.05, ge=0.01, le=0.3),
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return run_anomaly_detection(db, org(user), contamination=contamination)
 
 @app.get("/api/optimization")
 def optimization(user=Depends(current_user),db:Session=Depends(get_db)):
@@ -323,10 +350,11 @@ def put_resource_tags(id: str, data: ResourceTagsUpdate, user=Depends(current_us
         raise HTTPException(404, "Resource not found")
     return res
 @app.get("/api/rca/{id}")
-def rca(id:str,user=Depends(current_user),db:Session=Depends(get_db)):
-    a=db.get(Anomaly,id)
-    if not a or a.organization_id!=org(user): raise HTTPException(404,"Anomaly not found")
-    return {"root_cause":a.reason,"evidence":[f"{a.metric} anomaly score {a.score:.2f}",f"Estimated impact ${a.financial_impact:.2f}"],"impact":f"Estimated financial impact ${a.financial_impact:.2f}","timeline":[{"time":a.timestamp,"event":"Anomaly detected"}],"recommendation":a.recommendation}
+def rca(id: str, user=Depends(current_user), db: Session = Depends(get_db)):
+    rca_data = get_anomaly_rca(db, org(user), id)
+    if not rca_data:
+        raise HTTPException(404, "Anomaly not found")
+    return rca_data
 @app.get("/api/scaling")
 def scaling(user=Depends(current_user),db:Session=Depends(get_db)):
     rs=db.query(CloudResource).filter_by(organization_id=org(user)).order_by(CloudResource.utilization.desc()).limit(8).all()

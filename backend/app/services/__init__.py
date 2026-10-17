@@ -25,3 +25,11 @@ from .tag_governance import (
     evaluate_tag_governance,
     update_resource_tags,
 )
+from .forecast_service import (
+    generate_cost_forecast,
+)
+from .anomaly_service import (
+    list_anomalies,
+    run_anomaly_detection,
+    get_anomaly_rca,
+)
