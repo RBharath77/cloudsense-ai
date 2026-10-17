@@ -23,7 +23,10 @@ class Organization(Base):
     __tablename__="organizations"
     id: Mapped[str]=mapped_column(String, primary_key=True, default=uid)
     name: Mapped[str]=mapped_column(String, index=True)
+    currency: Mapped[str]=mapped_column(String, default="USD")
+    timezone: Mapped[str]=mapped_column(String, default="UTC")
     created_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class CloudAccount(Base):
     __tablename__="cloud_accounts"
@@ -246,7 +249,18 @@ class AuditLog(Base):
     action: Mapped[str]=mapped_column(String)
     status: Mapped[str]=mapped_column(String)
     detail: Mapped[str|None]=mapped_column(Text, nullable=True)
+    ip_address: Mapped[str|None]=mapped_column(String, nullable=True)
+    resource_type: Mapped[str|None]=mapped_column(String, nullable=True)
+    resource_id: Mapped[str|None]=mapped_column(String, nullable=True)
     created_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)
+
+class RevokedToken(Base):
+    __tablename__="revoked_tokens"
+    id: Mapped[str]=mapped_column(String, primary_key=True, default=uid)
+    token_jti: Mapped[str]=mapped_column(String, index=True)
+    user_id: Mapped[str|None]=mapped_column(String, index=True, nullable=True)
+    revoked_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)
+    expires_at: Mapped[datetime]=mapped_column(DateTime)
 
 class BillingImport(Base):
     __tablename__="billing_imports"

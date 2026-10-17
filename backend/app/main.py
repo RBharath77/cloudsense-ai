@@ -56,6 +56,14 @@ from .services import (
     schedule_digest_job,
     list_organization_reports,
     list_organization_report_jobs,
+    record_audit_log,
+    list_audit_logs,
+    list_workspace_users,
+    invite_workspace_user,
+    update_workspace_user_role,
+    deactivate_workspace_user,
+    get_workspace_profile,
+    update_workspace_profile,
 )
 
 app=FastAPI(title="CloudSense AI API", version="1.0.0")
@@ -66,6 +74,30 @@ with engine.connect() as _conn:
     from sqlalchemy import text
     try:
         _conn.execute(text("ALTER TABLE cost_records ADD COLUMN currency VARCHAR DEFAULT 'USD'"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE organizations ADD COLUMN currency VARCHAR DEFAULT 'USD'"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE organizations ADD COLUMN timezone VARCHAR DEFAULT 'UTC'"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE organizations ADD COLUMN updated_at DATETIME"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE audit_logs ADD COLUMN ip_address VARCHAR"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE audit_logs ADD COLUMN resource_type VARCHAR"))
+        _conn.commit()
+    except Exception: pass
+    try:
+        _conn.execute(text("ALTER TABLE audit_logs ADD COLUMN resource_id VARCHAR"))
         _conn.commit()
     except Exception: pass
     try:
@@ -254,6 +286,19 @@ class DigestJobRequest(BaseModel):
     delivery_channel: str = "DOWNLOAD"
     period_days: int = 30
 
+class UserInviteRequest(BaseModel):
+    email: str
+    role: str = "VIEWER"
+    password: str | None = None
+
+class UserRoleUpdateRequest(BaseModel):
+    role: str
+
+class WorkspaceSettingsRequest(BaseModel):
+    name: str | None = None
+    currency: str | None = None
+    timezone: str | None = None
+
 @app.post("/api/auth/register")
 def register(data:Register,db:Session=Depends(get_db)):
     if db.query(User).filter_by(email=data.email).first(): raise HTTPException(400,"Email already registered")
@@ -263,8 +308,42 @@ def register(data:Register,db:Session=Depends(get_db)):
 @app.post("/api/auth/login")
 def login(data:Login,db:Session=Depends(get_db)):
     u=db.query(User).filter_by(email=data.email).first()
-    if not u or not verify_password(data.password,u.password_hash): raise HTTPException(401,"Invalid email or password")
+    if not u or not verify_password(data.password,u.password_hash):
+        if u and u.organization_id:
+            record_audit_log(
+                db,
+                organization_id=u.organization_id,
+                user_id=u.id,
+                action="user_login",
+                status="FAILED",
+                detail=f"Failed login attempt for {data.email}",
+            )
+        raise HTTPException(401,"Invalid email or password")
+    if not u.is_active:
+        raise HTTPException(401,"User account is inactive or disabled")
+    if u.organization_id:
+        record_audit_log(
+            db,
+            organization_id=u.organization_id,
+            user_id=u.id,
+            action="user_login",
+            status="SUCCESS",
+            detail=f"User {u.email} authenticated successfully",
+        )
     return {"access_token":create_token(u.id),"token_type":"bearer","role":u.role}
+
+@app.post("/api/auth/logout")
+def logout(user=Depends(current_user), token: str = Depends(oauth2), db: Session = Depends(get_db)):
+    revoke_token(token, db, user_id=user.id)
+    record_audit_log(
+        db,
+        organization_id=org(user),
+        user_id=user.id,
+        action="user_logout",
+        status="SUCCESS",
+        detail="Session token revoked successfully",
+    )
+    return {"status": "success", "message": "Logged out successfully"}
 
 def org(user): return user.organization_id
 
@@ -637,9 +716,20 @@ def get_budgets(user=Depends(current_user), db: Session = Depends(get_db)):
     return list_budgets(db, org(user))
 
 @app.post("/api/budgets", status_code=201)
-def post_budget(data: BudgetCreate, user=Depends(current_user), db: Session = Depends(get_db)):
+def post_budget(data: BudgetCreate, user=Depends(require_roles("ADMIN", "FINOPS_ENGINEER")), db: Session = Depends(get_db)):
     try:
-        return create_budget(db, org(user), data.model_dump())
+        b = create_budget(db, org(user), data.model_dump())
+        record_audit_log(
+            db,
+            organization_id=org(user),
+            user_id=user.id,
+            action="budget_created",
+            status="SUCCESS",
+            detail=f"Created budget '{b.get('name')}' amount: ${b.get('limit')}",
+            resource_type="BUDGET",
+            resource_id=b.get("id"),
+        )
+        return b
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -651,20 +741,40 @@ def get_budget(id: str, user=Depends(current_user), db: Session = Depends(get_db
     return b
 
 @app.put("/api/budgets/{id}")
-def put_budget(id: str, data: BudgetUpdate, user=Depends(current_user), db: Session = Depends(get_db)):
+def put_budget(id: str, data: BudgetUpdate, user=Depends(require_roles("ADMIN", "FINOPS_ENGINEER")), db: Session = Depends(get_db)):
     try:
         b = update_budget(db, org(user), id, data.model_dump(exclude_unset=True))
         if not b:
             raise HTTPException(404, "Budget not found")
+        record_audit_log(
+            db,
+            organization_id=org(user),
+            user_id=user.id,
+            action="budget_updated",
+            status="SUCCESS",
+            detail=f"Updated budget '{b.get('name')}'",
+            resource_type="BUDGET",
+            resource_id=id,
+        )
         return b
     except ValueError as e:
         raise HTTPException(400, str(e))
 
 @app.delete("/api/budgets/{id}")
-def remove_budget(id: str, user=Depends(current_user), db: Session = Depends(get_db)):
+def remove_budget(id: str, user=Depends(require_roles("ADMIN", "FINOPS_ENGINEER")), db: Session = Depends(get_db)):
     success = delete_budget(db, org(user), id)
     if not success:
         raise HTTPException(404, "Budget not found")
+    record_audit_log(
+        db,
+        organization_id=org(user),
+        user_id=user.id,
+        action="budget_deleted",
+        status="SUCCESS",
+        detail=f"Deleted budget {id}",
+        resource_type="BUDGET",
+        resource_id=id,
+    )
     return {"status": "deleted", "id": id}
 
 @app.get("/api/alerts")
@@ -769,7 +879,7 @@ def get_report_jobs(user=Depends(current_user), db: Session = Depends(get_db)):
 async def import_billing_csv(
     file: UploadFile = File(...),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    user=Depends(current_user),
+    user=Depends(require_roles("ADMIN", "FINOPS_ENGINEER")),
     db: Session = Depends(get_db)
 ):
     content = await file.read()
@@ -825,3 +935,115 @@ def get_billing_import_detail(id: str, user=Depends(current_user), db: Session =
         "created_at": imp.created_at.isoformat(),
         "completed_at": imp.completed_at.isoformat() if imp.completed_at else None
     }
+
+# --- Phase 9: Security, Identity, and Collaboration Endpoints ---
+
+@app.get("/api/users")
+def get_workspace_users_api(user=Depends(current_user), db: Session = Depends(get_db)):
+    return list_workspace_users(db, org(user))
+
+@app.post("/api/users/invite", status_code=201)
+def invite_user_api(
+    data: UserInviteRequest,
+    user=Depends(require_roles("ADMIN")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return invite_workspace_user(
+            db,
+            organization_id=org(user),
+            admin_user_id=user.id,
+            email=data.email,
+            role=data.role,
+            password=data.password,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"User invitation failed: {str(e)}")
+
+@app.patch("/api/users/{id}/role")
+def update_user_role_api(
+    id: str,
+    data: UserRoleUpdateRequest,
+    user=Depends(require_roles("ADMIN")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return update_workspace_user_role(
+            db,
+            organization_id=org(user),
+            admin_user_id=user.id,
+            target_user_id=id,
+            new_role=data.role,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Role update failed: {str(e)}")
+
+@app.delete("/api/users/{id}")
+def delete_user_api(
+    id: str,
+    user=Depends(require_roles("ADMIN")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return deactivate_workspace_user(
+            db,
+            organization_id=org(user),
+            admin_user_id=user.id,
+            target_user_id=id,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Deactivation failed: {str(e)}")
+
+@app.get("/api/audit/logs")
+def get_audit_logs_api(
+    action: str | None = None,
+    status: str | None = None,
+    user_id: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    user=Depends(require_roles("ADMIN", "AUDITOR")),
+    db: Session = Depends(get_db),
+):
+    return list_audit_logs(
+        db,
+        organization_id=org(user),
+        action=action,
+        status=status,
+        user_id=user_id,
+        limit=limit,
+        offset=offset,
+    )
+
+@app.get("/api/workspace")
+def get_workspace_api(user=Depends(current_user), db: Session = Depends(get_db)):
+    try:
+        return get_workspace_profile(db, org(user))
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+@app.patch("/api/workspace/settings")
+def update_workspace_settings_api(
+    data: WorkspaceSettingsRequest,
+    user=Depends(require_roles("ADMIN")),
+    db: Session = Depends(get_db),
+):
+    try:
+        payload = data.model_dump(exclude_unset=True) if hasattr(data, "model_dump") else data.dict(exclude_unset=True)
+        return update_workspace_profile(
+            db,
+            organization_id=org(user),
+            admin_user_id=user.id,
+            name=payload.get("name"),
+            currency=payload.get("currency"),
+            timezone=payload.get("timezone"),
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Workspace update failed: {str(e)}")

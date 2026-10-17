@@ -63,3 +63,14 @@ from .report_service import (
     list_organization_reports,
     list_organization_report_jobs,
 )
+from .security_service import (
+    record_audit_log,
+    list_audit_logs,
+    list_workspace_users,
+    invite_workspace_user,
+    update_workspace_user_role,
+    deactivate_workspace_user,
+    get_workspace_profile,
+    update_workspace_profile,
+    ALLOWED_ROLES,
+)
