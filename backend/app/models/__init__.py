@@ -335,3 +335,64 @@ class SimulationScenario(Base):
     factor_source: Mapped[str]=mapped_column(String, default="EPA eGRID 2024")
     results: Mapped[str]=mapped_column(Text)  # JSON serialized results
     created_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)
+
+class SystemJobExecution(Base):
+    __tablename__ = "system_job_executions"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=uid)
+    organization_id: Mapped[str] = mapped_column(String, ForeignKey("organizations.id"), index=True)
+    job_type: Mapped[str] = mapped_column(String)  # ANOMALY_SWEEP | BUDGET_AUDIT | STORAGE_ORPHAN_SCAN | SCHEDULED_CONNECTOR_SYNC
+    status: Mapped[str] = mapped_column(String, default="QUEUED")  # QUEUED | RUNNING | SUCCEEDED | FAILED | CANCELLED
+    triggered_by: Mapped[str] = mapped_column(String, default="SYSTEM_CRON")  # SYSTEM_CRON | USER_MANUAL | ALERT_TRIGGER
+    payload: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON params
+    result: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON summary
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    execution_time_ms: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+class WebhookEndpoint(Base):
+    __tablename__ = "webhook_endpoints"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=uid)
+    organization_id: Mapped[str] = mapped_column(String, ForeignKey("organizations.id"), index=True)
+    name: Mapped[str] = mapped_column(String)
+    url: Mapped[str] = mapped_column(String)
+    secret_token: Mapped[str] = mapped_column(String)  # For HMAC-SHA256 signature
+    events: Mapped[str] = mapped_column(Text, default='["ANOMALY_DETECTED","BUDGET_BREACHED"]')  # JSON array
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_dispatched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+class WebhookDeliveryLog(Base):
+    __tablename__ = "webhook_delivery_logs"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=uid)
+    organization_id: Mapped[str] = mapped_column(String, ForeignKey("organizations.id"), index=True)
+    endpoint_id: Mapped[str] = mapped_column(String, ForeignKey("webhook_endpoints.id"), index=True)
+    event_type: Mapped[str] = mapped_column(String)
+    payload: Mapped[str] = mapped_column(Text)
+    response_status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    response_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String, default="SUCCESS")  # SUCCESS | FAILED
+    attempts: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class AutomatedAction(Base):
+    __tablename__ = "automated_actions"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=uid)
+    organization_id: Mapped[str] = mapped_column(String, ForeignKey("organizations.id"), index=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    approved_by_user_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    action_type: Mapped[str] = mapped_column(String)  # DEV_INSTANCE_OFFHOURS_SHUTDOWN | ORPHANED_DISK_CLEANUP | RIGHTSIZE_INSTANCE
+    target_resource_id: Mapped[str] = mapped_column(String)
+    target_resource_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    provider: Mapped[str] = mapped_column(String)
+    estimated_monthly_saving_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    risk_level: Mapped[str] = mapped_column(String, default="LOW")  # LOW | MEDIUM | HIGH
+    status: Mapped[str] = mapped_column(String, default="PROPOSED")  # PROPOSED | APPROVED | EXECUTED | REJECTED | ROLLED_BACK
+    is_simulation: Mapped[bool] = mapped_column(Boolean, default=True)
+    rollback_plan: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON text with rollback steps
+    execution_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    proposed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

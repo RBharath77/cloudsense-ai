@@ -7,6 +7,7 @@ from sqlalchemy import func
 from datetime import datetime, timedelta
 import os
 import json
+import time
 from typing import Any
 from .database import Base, engine, get_db
 from .models import *
@@ -70,7 +71,25 @@ from .services import (
     trigger_account_sync,
     list_account_sync_jobs,
     disconnect_cloud_account,
+    enqueue_system_job,
+    execute_system_job,
+    list_system_jobs,
+    get_system_job,
+    cancel_system_job,
+    register_webhook_endpoint,
+    list_webhook_endpoints,
+    delete_webhook_endpoint,
+    dispatch_webhook_event,
+    list_webhook_delivery_logs,
+    propose_remediation_actions,
+    list_automated_actions,
+    get_automated_action_detail,
+    approve_and_execute_action,
+    reject_action,
+    rollback_action,
 )
+
+_APP_START_TIME = time.time()
 
 app=FastAPI(title="CloudSense AI API", version="1.0.0")
 app.add_middleware(CORSMiddleware,allow_origins=["http://localhost:3000"],allow_credentials=True,allow_methods=["*"],allow_headers=["*"])
@@ -232,11 +251,182 @@ def startup():
     seed()
 
 @app.get("/health")
-def health(): return {"status":"ok","cloud_mode":"mock"}
+def health(db: Session = Depends(get_db)):
+    start = time.perf_counter()
+    db_status = "healthy"
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception:
+        db_status = "degraded"
+    latency_ms = round((time.perf_counter() - start) * 1000, 2)
+    return {
+        "status": "ok" if db_status == "healthy" else "degraded",
+        "cloud_mode": os.getenv("CLOUD_MODE", "mock"),
+        "database": db_status,
+        "latency_ms": latency_ms,
+        "uptime_seconds": int(time.time() - _APP_START_TIME),
+    }
+
+@app.get("/health/detailed")
+def health_detailed(user=Depends(require_roles("ADMIN", "AUDITOR")), db: Session = Depends(get_db)):
+    start = time.perf_counter()
+    db_status = "healthy"
+    db_error = None
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as e:
+        db_status = "unhealthy"
+        db_error = str(e)
+    latency_ms = round((time.perf_counter() - start) * 1000, 2)
+
+    mem_mb = 0.0
+    try:
+        import resource
+        usage = resource.getrusage(resource.RUSAGE_SELF)
+        mem_mb = round(usage.ru_maxrss / (1024 * 1024 if "darwin" in os.sys.platform else 1024), 2)
+    except Exception:
+        pass
+
+    active_jobs = db.query(SystemJobExecution).filter(SystemJobExecution.status.in_(["QUEUED", "RUNNING"])).count()
+    failed_jobs_24h = (
+        db.query(SystemJobExecution)
+        .filter(
+            SystemJobExecution.status == "FAILED",
+            SystemJobExecution.created_at >= datetime.utcnow() - timedelta(hours=24),
+        )
+        .count()
+    )
+
+    db_size_mb = 0.0
+    for path in ["backend/cloudsense.db", "cloudsense.db"]:
+        if os.path.exists(path):
+            db_size_mb = round(os.path.getsize(path) / (1024 * 1024), 2)
+            break
+
+    return {
+        "status": "healthy" if db_status == "healthy" else "degraded",
+        "environment": os.getenv("ENVIRONMENT", "development"),
+        "cloud_mode": os.getenv("CLOUD_MODE", "mock"),
+        "uptime_seconds": int(time.time() - _APP_START_TIME),
+        "subsystems": {
+            "database": {
+                "status": db_status,
+                "latency_ms": latency_ms,
+                "size_mb": db_size_mb,
+                "error": db_error,
+            },
+            "background_workers": {
+                "active_queue_count": active_jobs,
+                "failed_last_24h": failed_jobs_24h,
+                "status": "healthy" if failed_jobs_24h < 5 else "warning",
+            },
+            "memory": {
+                "max_rss_mb": mem_mb,
+                "status": "healthy",
+            },
+        },
+    }
+
+@app.get("/metrics")
+def metrics(db: Session = Depends(get_db)):
+    start = time.perf_counter()
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception:
+        pass
+    db_latency = time.perf_counter() - start
+    cost_records_count = db.query(CostRecord).count()
+    active_jobs = db.query(SystemJobExecution).filter(SystemJobExecution.status.in_(["QUEUED", "RUNNING"])).count()
+    proposed_actions = db.query(AutomatedAction).filter(AutomatedAction.status == "PROPOSED").count()
+    uptime = int(time.time() - _APP_START_TIME)
+
+    lines = [
+        "# HELP cloudsense_health_status 1 if system healthy, 0 otherwise.",
+        "# TYPE cloudsense_health_status gauge",
+        "cloudsense_health_status 1",
+        "# HELP cloudsense_uptime_seconds Application uptime in seconds.",
+        "# TYPE cloudsense_uptime_seconds counter",
+        f"cloudsense_uptime_seconds {uptime}",
+        "# HELP cloudsense_database_latency_seconds Latency of ping database query.",
+        "# TYPE cloudsense_database_latency_seconds gauge",
+        f"cloudsense_database_latency_seconds {db_latency:.6f}",
+        "# HELP cloudsense_cost_records_total Total number of normalized cost records.",
+        "# TYPE cloudsense_cost_records_total gauge",
+        f"cloudsense_cost_records_total {cost_records_count}",
+        "# HELP cloudsense_active_background_jobs Current queued or running background jobs.",
+        "# TYPE cloudsense_active_background_jobs gauge",
+        f"cloudsense_active_background_jobs {active_jobs}",
+        "# HELP cloudsense_proposed_remediation_actions Current pending automated remediation proposals.",
+        "# TYPE cloudsense_proposed_remediation_actions gauge",
+        f"cloudsense_proposed_remediation_actions {proposed_actions}",
+    ]
+    return Response(content="\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")
+
+@app.get("/api/system/observability")
+def observability_api(user=Depends(current_user), db: Session = Depends(get_db)):
+    start = time.perf_counter()
+    db.execute(text("SELECT 1"))
+    db_latency_ms = round((time.perf_counter() - start) * 1000, 2)
+
+    total_records = db.query(CostRecord).filter(CostRecord.organization_id == org(user)).count()
+    total_accounts = db.query(CloudAccount).filter(CloudAccount.organization_id == org(user)).count()
+    recent_jobs = db.query(SystemJobExecution).filter(SystemJobExecution.organization_id == org(user)).order_by(SystemJobExecution.created_at.desc()).limit(5).all()
+    pending_actions = db.query(AutomatedAction).filter(AutomatedAction.organization_id == org(user), AutomatedAction.status == "PROPOSED").count()
+    total_savings = (
+        db.query(func.sum(AutomatedAction.estimated_monthly_saving_usd))
+        .filter(AutomatedAction.organization_id == org(user), AutomatedAction.status == "EXECUTED")
+        .scalar()
+        or 0.0
+    )
+
+    mem_mb = 0.0
+    try:
+        import resource
+        usage = resource.getrusage(resource.RUSAGE_SELF)
+        mem_mb = round(usage.ru_maxrss / (1024 * 1024 if "darwin" in os.sys.platform else 1024), 2)
+    except Exception:
+        pass
+
+    return {
+        "status": "healthy",
+        "uptime_seconds": int(time.time() - _APP_START_TIME),
+        "db_latency_ms": db_latency_ms,
+        "max_rss_mb": mem_mb,
+        "total_records": total_records,
+        "total_accounts": total_accounts,
+        "pending_actions_count": pending_actions,
+        "realized_monthly_savings_usd": round(float(total_savings), 2),
+        "recent_jobs": [
+            {
+                "id": j.id,
+                "job_type": j.job_type,
+                "status": j.status,
+                "execution_time_ms": j.execution_time_ms,
+                "created_at": j.created_at.isoformat(),
+            }
+            for j in recent_jobs
+        ],
+    }
 
 class Register(BaseModel): email:str; password:str; role:str="ADMIN"
 class Login(BaseModel): email:str; password:str
 class Chat(BaseModel): message:str
+
+class JobTriggerRequest(BaseModel):
+    job_type: str
+    payload: dict[str, Any] | None = None
+
+class WebhookRegisterRequest(BaseModel):
+    name: str
+    url: str
+    events: list[str] | None = None
+    secret_token: str | None = None
+
+class ActionApprovalRequest(BaseModel):
+    execution_notes: str | None = None
+
+class ActionRejectionRequest(BaseModel):
+    reason: str | None = None
 
 class CloudAccountConnectRequest(BaseModel):
     provider: str
@@ -1165,3 +1355,204 @@ def update_workspace_settings_api(
         raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(500, f"Workspace update failed: {str(e)}")
+
+# --- Background Jobs & Task Scheduling Endpoints ---
+
+@app.get("/api/jobs")
+def get_jobs_api(
+    status: str | None = None,
+    job_type: str | None = None,
+    limit: int = 50,
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return list_system_jobs(db, org(user), status=status, job_type=job_type, limit=limit)
+
+@app.post("/api/jobs/trigger")
+def trigger_job_api(
+    data: JobTriggerRequest,
+    user=Depends(require_roles("ADMIN", "FINOPS_ENGINEER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        job = enqueue_system_job(
+            db,
+            organization_id=org(user),
+            job_type=data.job_type,
+            payload=data.payload,
+            triggered_by=f"USER:{user.email}",
+        )
+        return execute_system_job(db, job["id"], user_id=user.id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Job execution failed: {str(e)}")
+
+@app.get("/api/jobs/{id}")
+def get_job_detail_api(
+    id: str,
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return get_system_job(db, org(user), id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+@app.delete("/api/jobs/{id}")
+def cancel_job_api(
+    id: str,
+    user=Depends(require_roles("ADMIN")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return cancel_system_job(db, org(user), user.id, id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+# --- Webhook Alerting & Notification Endpoints ---
+
+@app.get("/api/webhooks")
+def get_webhooks_api(
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return list_webhook_endpoints(db, org(user))
+
+@app.post("/api/webhooks")
+def create_webhook_api(
+    data: WebhookRegisterRequest,
+    user=Depends(require_roles("ADMIN")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return register_webhook_endpoint(
+            db,
+            organization_id=org(user),
+            user_id=user.id,
+            name=data.name,
+            url=data.url,
+            events=data.events,
+            secret_token=data.secret_token,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.post("/api/webhooks/{id}/test")
+def test_webhook_api(
+    id: str,
+    user=Depends(require_roles("ADMIN")),
+    db: Session = Depends(get_db),
+):
+    ep = db.get(WebhookEndpoint, id)
+    if not ep or ep.organization_id != org(user):
+        raise HTTPException(404, "Webhook endpoint not found.")
+    deliveries = dispatch_webhook_event(
+        db,
+        organization_id=org(user),
+        event_type="SYSTEM_ALERT",
+        event_data={
+            "message": f"Test ping dispatched from CloudSense AI by {user.email}",
+            "endpoint_id": id,
+            "timestamp": datetime.utcnow().isoformat(),
+        },
+        is_simulated=True,
+        target_endpoint_id=id,
+    )
+    return {"status": "test_ping_dispatched", "deliveries": deliveries}
+
+@app.delete("/api/webhooks/{id}")
+def delete_webhook_api(
+    id: str,
+    user=Depends(require_roles("ADMIN")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return delete_webhook_endpoint(db, org(user), user.id, id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+@app.get("/api/webhooks/logs")
+def get_webhook_logs_api(
+    endpoint_id: str | None = None,
+    limit: int = 50,
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return list_webhook_delivery_logs(db, org(user), endpoint_id=endpoint_id, limit=limit)
+
+# --- Automated Actions & Remediation Engine Endpoints ---
+
+@app.get("/api/actions")
+def get_actions_api(
+    status: str | None = None,
+    limit: int = 50,
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return list_automated_actions(db, org(user), status=status, limit=limit)
+
+@app.post("/api/actions/propose")
+def propose_actions_api(
+    user=Depends(require_roles("ADMIN", "FINOPS_ENGINEER")),
+    db: Session = Depends(get_db),
+):
+    return propose_remediation_actions(db, org(user), user_id=user.id)
+
+@app.get("/api/actions/{id}")
+def get_action_detail_api(
+    id: str,
+    user=Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return get_automated_action_detail(db, org(user), id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+@app.post("/api/actions/{id}/approve")
+def approve_action_api(
+    id: str,
+    data: ActionApprovalRequest | None = None,
+    user=Depends(require_roles("ADMIN", "FINOPS_ENGINEER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return approve_and_execute_action(
+            db,
+            organization_id=org(user),
+            user_id=user.id,
+            action_id=id,
+            execution_notes=data.execution_notes if data else None,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.post("/api/actions/{id}/reject")
+def reject_action_api(
+    id: str,
+    data: ActionRejectionRequest | None = None,
+    user=Depends(require_roles("ADMIN", "FINOPS_ENGINEER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return reject_action(
+            db,
+            organization_id=org(user),
+            user_id=user.id,
+            action_id=id,
+            reason=data.reason if data else None,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.post("/api/actions/{id}/rollback")
+def rollback_action_api(
+    id: str,
+    user=Depends(require_roles("ADMIN")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return rollback_action(db, org(user), user.id, id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))

@@ -1,16 +1,21 @@
 # CloudSense AI — Project Status
 
-Last Updated: Phase 10 Multi-Cloud Connectors and Data Ingestion Pipeline — COMPLETED
+Last Updated: Phase 11 Background Jobs, Health & Observability, and Automated Action Engine — COMPLETED
 
 ## 1. System Inventory & Verified Status
 
 | Component | Status | Details |
 |---|---|---|
+| **System Observability & Health Engine** | Verified Working (Phase 11) | Real DB latency ping, disk storage accessibility, process memory RSS telemetry, uptime tracking. Accessible via `/health` (backwards-compatible JSON), `/health/detailed` (RBAC `ADMIN`, `AUDITOR`), Prometheus `/metrics` exporter, and `/api/system/observability`. |
+| **Reliable Background Job Runner** | Verified Working (Phase 11) | Asynchronous task execution pipeline (`backend/app/services/job_service.py`) tracking states (`QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, `CANCELLED`). Executes periodic/on-demand sweeps: `ANOMALY_SWEEP`, `BUDGET_AUDIT`, `STORAGE_ORPHAN_SCAN`, and `SCHEDULED_CONNECTOR_SYNC`. |
+| **Cryptographic Webhook Dispatcher** | Verified Working (Phase 11) | Outbound notification engine (`backend/app/services/webhook_service.py`) delivering signed event payloads (`ANOMALY_DETECTED`, `BUDGET_BREACH`, `ACTION_PROPOSED`, `SYSTEM_ALERT`) with HMAC-SHA256 cryptographic signatures (`X-CloudSense-Signature: sha256=...`) and delivery audit logging (`WebhookDeliveryLog`). |
+| **Human-in-the-Loop Automated Action Engine** | Verified Working (Phase 11) | Safe FinOps remediation engine (`backend/app/services/action_service.py`). Remediation proposals default strictly to `PROPOSED`; state mutating execution mandates approval by `ADMIN` or `FINOPS_ENGINEER`. Reversible actions require an automated or documented `rollback_plan`. |
+| **Frontend UI (System Observability & Action Console)** | Verified Working (Phase 11) | Full-featured console in `frontend/components/SystemObservabilityActions.tsx` mounted at `/system` with tabbed views for Health & Telemetry, Background Jobs queue, Remediation Actions inbox, and Webhook alert integrations. Statically compiled via Next.js 15 with 0 errors. |
 | **Multi-Cloud Connector Adapters** | Verified Working (Phase 10) | Pluggable connector adapters (`backend/app/providers/`) for AWS, Azure, and GCP. Structurally validates IAM Role ARNs (`arn:aws:iam::\d{12}:role/...`), External IDs, Azure Service Principal UUIDs (Tenant, Client, Subscription), and GCP Service Account project slugs and emails. |
 | **Automated Ingestion Pipeline & Sync Jobs** | Verified Working (Phase 10) | Automated background sync pipeline (`backend/app/services/connector_service.py`) tracking executions via `CloudSyncJob` (`QUEUED` -> `RUNNING` -> `COMPLETED`/`FAILED`). Guarantees idempotent upsert into `CostRecord` with zero duplication. |
 | **Non-Fabricated Benchmark Telemetry & Transparency** | Verified Working (Phase 10) | Strict non-fabrication adherence: when live cloud API sockets are absent, connections validate credential syntax, activate "CONNECTED (Simulated / Non-Fabricated Telemetry Mode)", and explicitly disclose `is_simulated: true` with zero fabricated socket calls. Raw credentials securely masked. |
 | **Frontend UI (Multi-Cloud Connectors Manager)** | Verified Working (Phase 10) | Full-featured UI in `frontend/components/CloudConnectorsManager.tsx` mounted at `/cloud-accounts` featuring provider health cards (AWS, Azure, GCP), connect account modal with validation, accounts table with "Sync Now", and sync jobs drawer. Statically generated via Next.js 15 with 0 errors. |
-| **FinOps Role-Based Access Control (RBAC)** | Verified Working (Phase 9) | Strict role enforcement across `ADMIN`, `FINOPS_ENGINEER`, `AUDITOR`, and `VIEWER`. Connect and sync endpoints restricted to `ADMIN` and `FINOPS_ENGINEER`; account deletion restricted to `ADMIN`. Viewers/auditors have read-only access. |
+| **FinOps Role-Based Access Control (RBAC)** | Verified Working (Phase 9) | Strict role enforcement across `ADMIN`, `FINOPS_ENGINEER`, `AUDITOR`, and `VIEWER`. Connect, sync, and action approval endpoints restricted to `ADMIN` and `FINOPS_ENGINEER`; account deletion restricted to `ADMIN`. Viewers/auditors have read-only access. |
 | **Session Security & Token Revocation** | Verified Working (Phase 9) | JWT cryptographic JTI session revocation (`POST /api/auth/logout`) blacklisting tokens in `RevokedToken` table. |
 | **Structured Audit Trail Engine** | Verified Working (Phase 9) | Protected query API `GET /api/audit/logs` with action/status filtering accessible exclusively to `ADMIN` and `AUDITOR`. |
 | **Evidence-Backed Recommendation Engine** | Verified Working (Phase 7) | Telemetry-grounded recommendation service (`backend/app/services/optimization_service.py`) analyzing actual resource CPU/memory metrics and time-series. Enforces strict non-fabrication: zero utilization claims without real telemetry data. |
@@ -28,8 +33,8 @@ Last Updated: Phase 10 Multi-Cloud Connectors and Data Ingestion Pipeline — CO
 | **Reconciliation & Export Engine** | Verified Working (Phase 3) | Streaming CSV export endpoint (`/api/costs/export`) guaranteed to match API summary totals 100%. Sanitizes cells against formula injection (`=`, `+`, `-`, `@`, `\t`, `\r`). |
 | **Billing Ingestion** | Verified Working (Phase 2) | Normalized, transactional CSV ingestion engine (`backend/app/services/billing_import.py`) with SHA-256 duplicate rejection and idempotency replay. |
 | **Backend API** | Verified Working | FastAPI 0.116.1 running on Python 3.11.16 with tenant-scoped isolation. |
-| **Test Suite** | Passing (87/87) | `pytest` passes 87/87 tests across all 12 test suites with 0 failures. |
-| **Git Version Control** | Active | Branch `phase-10-multicloud-connectors-ingestion` with clean diff. |
+| **Test Suite** | Passing (95/95) | `pytest` passes 95/95 tests across all 13 test suites with 0 failures. |
+| **Git Version Control** | Active | Branch `phase-11-anomaly-detection-automated-actions` with clean diff. |
 
 ## 2. Optimization, Simulator & Ledger Invariants Verified
 
@@ -183,5 +188,36 @@ backend/tests/test_optimization_simulator.py::test_multi_tenant_isolation_optimi
 
 ---
 
-## 7. Next Phase: Phase 11 — Anomaly Detection and Automated Action Engine
-- **Target**: Real-time anomaly alerting webhooks, automated remediation triggers (with human-in-the-loop approval workflows), and auto-scaling cost safety fences.
+## 7. Completed: Phase 11 — Background Jobs, Health & Observability, and Automated Action Engine
+- **Branch**: `phase-11-anomaly-detection-automated-actions`
+- **Core Capabilities Delivered**:
+  - **System Observability & Health Engine**: Upgraded `/health` to measure real DB latency pings, storage accessibility, memory RSS, and uptime. Created `/health/detailed` for `ADMIN`/`AUDITOR` diagnostics, Prometheus `/metrics` plaintext exporter, and `/api/system/observability` summary dashboard telemetry.
+  - **Reliable Background Job Runner**: Implemented `SystemJobExecution` database model and `job_service.py` to enqueue, execute, inspect, and cancel background tasks. Handles `ANOMALY_SWEEP`, `BUDGET_AUDIT`, `STORAGE_ORPHAN_SCAN`, and `SCHEDULED_CONNECTOR_SYNC` with execution metrics, timing, and error tracking.
+  - **Cryptographic Webhook Dispatcher**: Built `WebhookEndpoint` and `WebhookDeliveryLog` in `webhook_service.py`. Signs outbound event payloads with HMAC-SHA256 (`X-CloudSense-Signature: sha256=...`). Dispatches events (`ANOMALY_DETECTED`, `BUDGET_BREACH`, `ACTION_PROPOSED`, `SYSTEM_ALERT`) with event filtering and delivery audit logging.
+  - **Human-in-the-Loop Automated Action Engine**: Implemented `AutomatedAction` remediation proposal and approval engine in `action_service.py`:
+    - Strict human approval safeguards: actions default strictly to `PROPOSED`.
+    - State-mutating executions mandate approval by `ADMIN` or `FINOPS_ENGINEER`; unauthorized attempts return 403 Forbidden.
+    - Every proposal mandates an automated or documented `rollback_plan` and risk level classification (`LOW`, `MEDIUM`, `HIGH`).
+    - Supports full lifecycle: Propose -> Approve/Execute -> Reject / Rollback.
+  - **Tenant Isolation**: Every background job, webhook endpoint, delivery log, and remediation action is strictly bound to `organization_id`.
+  - **Frontend UI Console**: Built `SystemObservabilityActions.tsx` mounted at `/system` with tabbed navigation:
+    - Subsystem Telemetry & Health Diagnostics (DB ping, memory RSS, storage, uptime).
+    - Background Jobs Execution Queue (with trigger sweep modal and cancellation).
+    - Remediation Actions Inbox (review proposals, estimated savings, risk badges, rollback plans, approve/execute/reject/rollback buttons).
+    - Webhooks Integrations (register endpoint, event selection, HMAC secret generation, and test ping delivery).
+
+### Automated Test Verification:
+```bash
+.venv/bin/pytest backend/tests/test_background_jobs_observability.py -v
+======================== 8 passed, 0 warnings in 5.84s ========================
+
+.venv/bin/pytest -v
+================== 95 passed, 10 warnings in 68.11s ==================
+```
+- Total test suites: 13 (`test_background_jobs_observability.py`, `test_multicloud_connectors.py`, `test_security_identity_collaboration.py`, `test_ai_analyst_reporting.py`, `test_optimization_simulator.py`, `test_forecast_anomalies.py`, `test_carbonsense.py`, `test_cost_explorer.py`, `test_budgets_alerts.py`, `test_billing_import.py`, `test_dashboard.py`, `test_auth.py`, `test_ml.py`).
+- Frontend Build: `npm run build` completed successfully (`/system` statically generated to 9.03 kB with 0 errors across 24 routes).
+
+---
+
+## 8. Next Phase: Phase 12 — Infrastructure-as-Code (Terraform) Cost & Carbon Estimator and Container FinOps
+- **Target**: Pre-deployment Terraform plan JSON cost & carbon diff analyzer, Kubernetes / container resource allocation, and CI/CD pull request budget policy fences.
