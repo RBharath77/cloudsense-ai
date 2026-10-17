@@ -1,14 +1,134 @@
 from datetime import datetime,timedelta
 import random
+import json
 from sqlalchemy.orm import Session
 from .database import Base, engine, SessionLocal
 from .models import *
 from .auth import hash_password
 
+def seed_supplemental_entities(db: Session, org_id: str, user_id: str | None = None):
+    now = datetime.utcnow()
+    # 1. System Jobs (Phase 11)
+    if not db.query(SystemJobExecution).filter_by(organization_id=org_id).first():
+        db.add(SystemJobExecution(
+            organization_id=org_id,
+            job_type="ANOMALY_SWEEP",
+            status="SUCCEEDED",
+            triggered_by="SYSTEM_SCHEDULER",
+            payload='{"lookback_days": 14}',
+            result='{"anomalies_evaluated": 120, "anomalies_detected": 7}',
+            execution_time_ms=342,
+            created_at=now - timedelta(hours=2),
+            started_at=now - timedelta(hours=2),
+            completed_at=now - timedelta(hours=2) + timedelta(milliseconds=342),
+        ))
+        db.add(SystemJobExecution(
+            organization_id=org_id,
+            job_type="BUDGET_AUDIT",
+            status="SUCCEEDED",
+            triggered_by="SYSTEM_SCHEDULER",
+            payload='{}',
+            result='{"budgets_audited": 3, "breaches_flagged": 0}',
+            execution_time_ms=189,
+            created_at=now - timedelta(hours=6),
+            started_at=now - timedelta(hours=6),
+            completed_at=now - timedelta(hours=6) + timedelta(milliseconds=189),
+        ))
+
+    # 2. Webhook Endpoint (Phase 11)
+    if not db.query(WebhookEndpoint).filter_by(organization_id=org_id).first():
+        db.add(WebhookEndpoint(
+            organization_id=org_id,
+            name="FinOps Incident Slack Webhook",
+            url="https://hooks.slack.com/services/T00000000/B00000000/mock_finops_alert_token",
+            secret_token="c10ud53n53_hmac_53cr37_70k3n_32by735",
+            events='["ANOMALY_DETECTED","BUDGET_BREACHED","ACTION_PROPOSED"]',
+            is_active=True,
+            last_dispatched_at=now - timedelta(hours=1),
+            last_status_code=200,
+        ))
+
+    # 3. Automated Remediation Action (Phase 11)
+    if not db.query(AutomatedAction).filter_by(organization_id=org_id).first():
+        db.add(AutomatedAction(
+            organization_id=org_id,
+            created_by_user_id=user_id,
+            action_type="RIGHTSIZE_UNDERUTILIZED_EC2",
+            target_resource_id="aws-prod-compute-001",
+            target_resource_name="aws-001",
+            provider="AWS",
+            estimated_monthly_saving_usd=145.0,
+            risk_level="LOW",
+            status="PROPOSED",
+            is_simulation=True,
+            rollback_plan=json.dumps({
+                "type": "REVERT_INSTANCE_TYPE",
+                "original_type": "m5.2xlarge",
+                "proposed_type": "m5.xlarge",
+                "steps": ["Stop instance", "Modify attribute instance_type to m5.2xlarge", "Start instance"]
+            }),
+            execution_notes="Proposed based on 90-day peak CPU utilization below 28%.",
+        ))
+
+    # 4. Terraform Plan Analysis (Phase 12)
+    if not db.query(TerraformPlanAnalysis).filter_by(organization_id=org_id).first():
+        db.add(TerraformPlanAnalysis(
+            organization_id=org_id,
+            created_by_user_id=user_id,
+            plan_name="Q4 Web Infrastructure Expansion",
+            provider="aws",
+            resources_created=3,
+            resources_updated=1,
+            resources_deleted=0,
+            monthly_cost_before_usd=120.50,
+            monthly_cost_after_usd=197.24,
+            monthly_cost_delta_usd=76.74,
+            monthly_emissions_delta_kgco2e=18.2,
+            policy_status="PASSED",
+            policy_violations="[]",
+            raw_plan_summary=json.dumps({
+                "changes_count": 4,
+                "is_simulated_benchmark": True,
+                "pricing_source": "AWS 2025/2026 On-Demand Catalog",
+                "carbon_source": "EPA eGRID 2024 / EEA 2023",
+            }),
+        ))
+
+    # 5. Kubernetes Container Allocations (Phase 12)
+    if not db.query(KubernetesCostAllocation).filter_by(organization_id=org_id).first():
+        today = now.strftime("%Y-%m-%d")
+        for item in [
+            {"ns": "ingress-system", "w": "ingress-nginx-controller", "t": "DaemonSet", "c_a": 2.0, "c_u": 1.4, "m_a": 4294967296, "m_u": 3006477107, "cost": 128.50, "eff": 70.0, "idle": 38.55},
+            {"ns": "payments", "w": "payment-processing-engine", "t": "Deployment", "c_a": 8.0, "c_u": 2.1, "m_a": 17179869184, "m_u": 6657199308, "cost": 486.20, "eff": 32.5, "idle": 328.19},
+            {"ns": "frontend", "w": "customer-portal-spa", "t": "Deployment", "c_a": 4.0, "c_u": 2.9, "m_a": 8589934592, "m_u": 6012954214, "cost": 242.00, "eff": 71.2, "idle": 69.70},
+            {"ns": "analytics", "w": "spark-worker-daemon", "t": "StatefulSet", "c_a": 12.0, "c_u": 4.2, "m_a": 34359738368, "m_u": 15569256448, "cost": 765.40, "eff": 40.1, "idle": 458.47},
+        ]:
+            db.add(KubernetesCostAllocation(
+                organization_id=org_id,
+                cluster_name="production-eks-cluster",
+                namespace=item["ns"],
+                workload_name=item["w"],
+                workload_type=item["t"],
+                cpu_allocated_cores=item["c_a"],
+                cpu_usage_cores=item["c_u"],
+                memory_allocated_bytes=item["m_a"],
+                memory_usage_bytes=item["m_u"],
+                efficiency_score=item["eff"],
+                monthly_allocated_cost_usd=item["cost"],
+                monthly_idle_cost_usd=item["idle"],
+                is_simulated=True,
+                recorded_date=today,
+            ))
+
+    db.commit()
+
 def seed():
     Base.metadata.create_all(engine); db=SessionLocal()
     try:
         org=db.query(Organization).first()
+        u=db.query(User).filter_by(role="ADMIN").first()
+        if org:
+            seed_supplemental_entities(db, org.id, u.id if u else None)
         if org and not db.query(SavingsLedger).filter_by(organization_id=org.id).first():
             now=datetime.utcnow()
             db.add(SavingsLedger(
