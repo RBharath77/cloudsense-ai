@@ -179,8 +179,13 @@ def seed():
             ))
             db.commit()
         if db.query(User).first(): return
-        org=Organization(name="NovaTech Solutions"); db.add(org); db.flush()
-        user=User(email="admin@cloudsense.ai",password_hash=hash_password("CloudSense@123"),role="ADMIN",organization_id=org.id); db.add(user)
+        org=Organization(name="CloudSense AI"); db.add(org); db.flush()
+        pwd_demo = hash_password("CloudSense@123")
+        user=User(email="admin@cloudsense.ai",password_hash=pwd_demo,role="ADMIN",organization_id=org.id); db.add(user)
+        db.add(User(email="finops@cloudsense.ai",password_hash=pwd_demo,role="FINOPS_ENGINEER",organization_id=org.id))
+        db.add(User(email="auditor@cloudsense.ai",password_hash=pwd_demo,role="AUDITOR",organization_id=org.id))
+        db.add(User(email="viewer@cloudsense.ai",password_hash=pwd_demo,role="VIEWER",organization_id=org.id))
+
         accounts=[]
         for p,n,c,r in [("AWS","AWS Production",28450,"us-east-1"),("Azure","Azure Analytics",10240,"eastus"),("GCP","GCP ML Platform",4160,"us-central1")]:
             a=CloudAccount(organization_id=org.id,provider=p,name=n,identifier=f"demo-{p.lower()}-001",region=r,last_sync=datetime.utcnow()); db.add(a); db.flush(); accounts.append((a,c))
@@ -281,7 +286,8 @@ def seed():
         for p in ["AWS","Azure","GCP"]: db.add(SLARecord(organization_id=org.id,service=f"{p} platform",availability=random.choice([99.9,99.95,99.99]),latency=random.uniform(40,120),downtime=random.uniform(2,20),incidents=random.randint(0,3),breached=False,timestamp=now))
         for p,c in [("AWS",28.45),("Azure",10.24),("GCP",4.16)]: db.add(CarbonRecord(organization_id=org.id,provider=p,region="primary",service="all",co2_kg=c,recorded_at=now,source=f"{p} Carbon Footprint Tool",scope="Scope 2",record_type="DEMO",unit="kgCO2e",reporting_period="2026-10",methodology="Initial baseline demonstration snapshot"))
         db.add(CarbonBudget(organization_id=org.id,name="2026 Cloud Emissions Cap",target_kg=100.0,threshold=0.85,period="ANNUAL",year=2026))
-        db.add(Budget(organization_id=org.id,scope="organization",target="NovaTech Solutions",amount=50000,threshold=.9))
+        db.add(Budget(organization_id=org.id,scope="organization",target="CloudSense AI",amount=50000,threshold=.9))
+
         db.add(Alert(organization_id=org.id,type="Cost Spike",severity="HIGH",title="AWS cost spike detected",message="A cost anomaly was detected in the demo workload."))
         db.commit()
     finally: db.close()

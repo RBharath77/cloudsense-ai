@@ -4,6 +4,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 from ..models import User, Organization, AuditLog, Budget, CloudAccount
 from ..auth import hash_password
+from .email_service import generate_ai_password, send_invitation_email
 
 ALLOWED_ROLES = {"ADMIN", "FINOPS_ENGINEER", "AUDITOR", "VIEWER"}
 
@@ -88,6 +89,7 @@ def list_workspace_users(db: Session, organization_id: str) -> list[dict[str, An
         {
             "id": u.id,
             "email": u.email,
+            "name": u.name or u.email.split('@')[0].capitalize(),
             "role": u.role,
             "is_active": u.is_active,
             "created_at": u.created_at.isoformat(),
@@ -101,10 +103,13 @@ def invite_workspace_user(
     admin_user_id: str,
     email: str,
     role: str = "VIEWER",
+    name: str | None = None,
     password: str | None = None,
+    admin_email: str | None = None,
 ) -> dict[str, Any]:
     """
-    Invites / registers a user into the workspace under the specified FinOps role.
+    Invites / registers a user into the workspace under the specified FinOps role,
+    generates an AI-grade temporary password, and dispatches an invitation email via Gmail SMTP.
     """
     clean_role = role.upper()
     if clean_role not in ALLOWED_ROLES:
@@ -114,9 +119,12 @@ def invite_workspace_user(
     if existing:
         raise ValueError("A user with this email address is already registered.")
 
-    default_pwd = password or f"Welcome_{uuid.uuid4().hex[:8]}!"
+    default_pwd = password or generate_ai_password()
+    resolved_name = (name or "").strip() or email.split('@')[0].replace('.', ' ').capitalize()
+
     new_user = User(
         email=email,
+        name=resolved_name,
         password_hash=hash_password(default_pwd),
         role=clean_role,
         organization_id=organization_id,
@@ -126,13 +134,22 @@ def invite_workspace_user(
     db.commit()
     db.refresh(new_user)
 
+    # Dispatch invitation email via Warbytes Gmail SMTP
+    email_res = send_invitation_email(
+        to_email=email,
+        username=resolved_name,
+        role=clean_role,
+        temp_password=default_pwd,
+        invited_by=admin_email or "Workspace Administrator",
+    )
+
     record_audit_log(
         db,
         organization_id=organization_id,
         user_id=admin_user_id,
         action="user_invited",
         status="SUCCESS",
-        detail=f"Invited user {email} with role {clean_role}",
+        detail=f"Invited user {email} with role {clean_role} via Warbytes email dispatch",
         resource_type="USER",
         resource_id=new_user.id,
     )
@@ -140,10 +157,12 @@ def invite_workspace_user(
     return {
         "id": new_user.id,
         "email": new_user.email,
+        "name": new_user.name,
         "role": new_user.role,
         "is_active": new_user.is_active,
         "created_at": new_user.created_at.isoformat(),
-        "temporary_password": default_pwd if not password else None,
+        "temporary_password": default_pwd,
+        "email_dispatched": email_res.get("success", False),
     }
 
 def update_workspace_user_role(

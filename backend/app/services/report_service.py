@@ -2,6 +2,7 @@ import os
 import csv
 import io
 import json
+import uuid
 from datetime import datetime, timedelta
 from typing import Any
 from reportlab.lib.pagesizes import letter
@@ -16,7 +17,7 @@ from reportlab.platypus import (
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from sqlalchemy.orm import Session
-from ..models import Organization, Report, ReportJob, AuditLog
+from ..models import Organization, Report, ReportJob, AuditLog, User
 from .cost_aggregation import get_cost_summary, get_dashboard_metrics, _sanitize_csv_cell as sanitize_csv_cell
 from .carbon_service import get_carbon_summary
 from .optimization_service import get_recommendations_with_priority
@@ -33,15 +34,21 @@ def generate_executive_pdf(
     db: Session,
     organization_id: str,
     period_days: int = 30,
+    user_id: str | None = None,
 ) -> tuple[str, int]:
     """
-    Generates a database-reconciled, professional Executive Intelligence PDF report.
-    Guaranteed reconciliation: uses authoritative get_dashboard_metrics,
-    get_carbon_summary, and get_recommendations_with_priority.
+    Generates a database-reconciled, professional Executive Intelligence PDF report
+    with authoritative user billing provenance, generation timestamp, and reconciliation checks.
     """
     ensure_reports_dir()
     org = db.get(Organization, organization_id)
     org_name = org.name if org else "CloudSense Workspace"
+
+    user = db.get(User, user_id) if user_id else None
+    user_email = user.email if user else "admin@cloudsense.ai"
+    user_name = user.email.split('@')[0].replace('.', ' ').capitalize() if user else "Authorized Analyst"
+    download_time_utc = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    report_uuid = f"CS-REP-{uuid.uuid4().hex[:10].upper()}"
 
     timestamp_str = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     filename = f"executive_report_{organization_id[:8]}_{timestamp_str}.pdf"
@@ -111,11 +118,37 @@ def generate_executive_pdf(
     # Header
     elements.append(Paragraph("CloudSense AI — Executive Cloud Intelligence Digest", title_style))
     elements.append(Paragraph(
-        f"Organization: <b>{org_name}</b> &nbsp;|&nbsp; Observation Window: <b>Past {period_days} Days</b> &nbsp;|&nbsp; Generated: <b>{datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}</b>",
+        f"Organization: <b>{org_name}</b> &nbsp;|&nbsp; Observation Window: <b>Past {period_days} Days</b> &nbsp;|&nbsp; Generated & Stamped: <b>{download_time_utc}</b>",
         subtitle_style,
     ))
-    elements.append(Spacer(1, 10))
-    elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#0284c7"), spaceAfter=15))
+    elements.append(Spacer(1, 8))
+
+    # User & Billing Provenance Stamp Card
+    meta_box_data = [
+        [
+            Paragraph("<b>Billed To / Account Holder:</b>", body_style),
+            Paragraph(f"<b>{user_name}</b> ({user_email})", body_style),
+            Paragraph("<b>Download Timestamp:</b>", body_style),
+            Paragraph(f"<b>{download_time_utc}</b>", body_style),
+        ],
+        [
+            Paragraph("<b>Workspace Organization:</b>", body_style),
+            Paragraph(f"<b>{org_name}</b>", body_style),
+            Paragraph("<b>Report Verification ID:</b>", body_style),
+            Paragraph(f"<font face='Courier'>{report_uuid}</font>", body_style),
+        ],
+    ]
+    meta_table = Table(meta_box_data, colWidths=[140, 160, 130, 150])
+    meta_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
+        ("BOX", (0, 0), (-1, -1), 1, colors.HexColor("#38bdf8")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(meta_table)
+    elements.append(Spacer(1, 8))
+    elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#0284c7"), spaceAfter=14))
 
     # KPI Summary Table
     elements.append(Paragraph("1. Executive FinOps & Sustainability Scorecard", section_heading))
@@ -223,7 +256,15 @@ def generate_executive_pdf(
     )
     elements.append(Paragraph(disclosures_text, body_style))
 
-    doc.build(elements)
+    def draw_page_footer(canvas, document):
+        canvas.saveState()
+        canvas.setFont('Helvetica', 7.5)
+        canvas.setFillColor(colors.HexColor("#64748b"))
+        footer_line = f"CloudSense AI FinOps Intelligence · Billed To: {user_name} ({user_email}) · Download Timestamp: {download_time_utc} · Page {document.page}"
+        canvas.drawString(40, 20, footer_line)
+        canvas.restoreState()
+
+    doc.build(elements, onFirstPage=draw_page_footer, onLaterPages=draw_page_footer)
     file_size = os.path.getsize(filepath)
     return filepath, file_size
 
@@ -231,11 +272,22 @@ def generate_executive_csv(
     db: Session,
     organization_id: str,
     period_days: int = 30,
+    user_id: str | None = None,
 ) -> tuple[str, int]:
     """
-    Generates a database-reconciled CSV summary report with formula-injection mitigation.
+    Generates a database-reconciled CSV summary report with formula-injection mitigation,
+    user billing provenance, and authoritative download timestamp.
     """
     ensure_reports_dir()
+    org = db.get(Organization, organization_id)
+    org_name = org.name if org else "CloudSense Workspace"
+
+    user = db.get(User, user_id) if user_id else None
+    user_email = user.email if user else "admin@cloudsense.ai"
+    user_name = user.email.split('@')[0].replace('.', ' ').capitalize() if user else "Authorized Analyst"
+    download_time_utc = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    report_uuid = f"CS-CSV-{uuid.uuid4().hex[:10].upper()}"
+
     timestamp_str = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     filename = f"cost_breakdown_{organization_id[:8]}_{timestamp_str}.csv"
     filepath = os.path.join(REPORTS_DIR, filename)
@@ -253,10 +305,13 @@ def generate_executive_csv(
     with open(filepath, mode="w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["# CloudSense AI — Cost Breakdown Report"])
-        writer.writerow(["# Generated At", datetime.utcnow().isoformat()])
+        writer.writerow(["# Billed To / Account Holder", f"{user_name} ({user_email})"])
+        writer.writerow(["# Workspace Organization", org_name])
+        writer.writerow(["# Download Timestamp", download_time_utc])
+        writer.writerow(["# Report Verification ID", report_uuid])
         writer.writerow(["# Observation Days", period_days])
-        writer.writerow(["# Current Spend", metrics["current_month_spend"]])
-        writer.writerow(["# Prior Spend", metrics["previous_period_spend"]])
+        writer.writerow(["# Current Spend ($)", metrics["current_month_spend"]])
+        writer.writerow(["# Prior Spend ($)", metrics["previous_period_spend"]])
         writer.writerow(["# Spend Change %", metrics["change_percentage"] if metrics["change_percentage"] is not None else "N/A"])
         writer.writerow([])
         writer.writerow(["Provider", "Current Spend ($)", "Prior Spend ($)", "Variance (%)"])
@@ -296,10 +351,10 @@ def create_and_run_report(
     format_clean = report_format.upper()
 
     if format_clean == "CSV":
-        filepath, file_size = generate_executive_csv(db, organization_id, period_days=period_days)
+        filepath, file_size = generate_executive_csv(db, organization_id, period_days=period_days, user_id=user_id)
         name = f"Cost Breakdown CSV ({period_days}D)"
     else:
-        filepath, file_size = generate_executive_pdf(db, organization_id, period_days=period_days)
+        filepath, file_size = generate_executive_pdf(db, organization_id, period_days=period_days, user_id=user_id)
         name = f"Executive Intelligence Report ({period_days}D)"
 
     report = Report(

@@ -1,0 +1,143 @@
+# ==============================================================================
+# CloudSense AI - Production High-Concurrency HTTPS Cluster Stack
+# Components: Nginx Load Balancer (HTTPS 443), Replicated API Workers, Next.js Cluster
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Reverse Proxy & HTTPS Load Balancer
+  # ----------------------------------------------------------------------------
+  load-balancer:
+    image: nginx:1.27-alpine
+    container_name: cloudsense_load_balancer
+    restart: always
+    ports:
+      - "80:80"     # Automatically redirects to HTTPS
+      - "443:443"   # Encrypted TLS termination
+    volumes:
+      - ./nginx/load_balancer.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl/cloudsense.crt:/etc/nginx/ssl/cloudsense.crt:ro
+      - ./ssl/cloudsense.key:/etc/nginx/ssl/cloudsense.key:ro
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      backend_1:
+        condition: service_healthy
+      backend_2:
+        condition: service_healthy
+      frontend_1:
+        condition: service_started
+    networks:
+      - cloudsense_network
+
+  # ----------------------------------------------------------------------------
+  # 2. Replicated FastAPI Backend Worker Cluster (Least-Conn Balanced)
+  # ----------------------------------------------------------------------------
+  backend_1:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: cloudsense_backend_1
+    restart: always
+    environment:
+      - CLOUDSENSE_ENV=production
+      - FORCE_HTTPS=true
+      - HSTS_ENABLED=true
+      - PII_MASKING_ENABLED=true
+      - DB_BUSY_TIMEOUT_MS=15000
+      - DB_CONNECTION_TIMEOUT=30.0
+      - JWT_SECRET=production-secure-finops-jwt-token-key-2026
+    volumes:
+      - app_data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - cloudsense_network
+
+  backend_2:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: cloudsense_backend_2
+    restart: always
+    environment:
+      - CLOUDSENSE_ENV=production
+      - FORCE_HTTPS=true
+      - HSTS_ENABLED=true
+      - PII_MASKING_ENABLED=true
+      - DB_BUSY_TIMEOUT_MS=15000
+      - DB_CONNECTION_TIMEOUT=30.0
+      - JWT_SECRET=production-secure-finops-jwt-token-key-2026
+    volumes:
+      - app_data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - cloudsense_network
+
+  backend_3:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: cloudsense_backend_3
+    restart: always
+    environment:
+      - CLOUDSENSE_ENV=production
+      - FORCE_HTTPS=true
+      - HSTS_ENABLED=true
+      - PII_MASKING_ENABLED=true
+      - DB_BUSY_TIMEOUT_MS=15000
+      - DB_CONNECTION_TIMEOUT=30.0
+      - JWT_SECRET=production-secure-finops-jwt-token-key-2026
+    volumes:
+      - app_data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - cloudsense_network
+
+  # ----------------------------------------------------------------------------
+  # 3. Next.js Frontend Cluster
+  # ----------------------------------------------------------------------------
+  frontend_1:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: cloudsense_frontend_1
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://localhost/api
+    networks:
+      - cloudsense_network
+
+  frontend_2:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: cloudsense_frontend_2
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://localhost/api
+    networks:
+      - cloudsense_network
+
+networks:
+  cloudsense_network:
+    driver: bridge
+
+volumes:
+  app_data:
+    driver: local

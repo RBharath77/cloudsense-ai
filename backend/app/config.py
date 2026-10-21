@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     mock_slack: bool = True
     ollama_base_url: str | None = None
     llm_model: str | None = None
+    force_https: bool = False
+    hsts_enabled: bool = True
+    pii_masking_enabled: bool = True
+    trusted_proxies: str = "*"
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()

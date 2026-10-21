@@ -24,6 +24,8 @@ interface ChatMessageItem {
   missing_data_acknowledged?: boolean;
   missing_data_details?: string[];
   mode?: string;
+  task_executed?: boolean;
+  action_performed?: string;
 }
 
 interface ToolDefinition {
@@ -32,6 +34,16 @@ interface ToolDefinition {
   parameters: Record<string, any>;
   category: string;
 }
+
+const AGENTIC_TASKS = [
+  { label: '⚡ Run Anomaly Scan', cmd: 'Run anomaly detection scan on our historical cloud billing' },
+  { label: '⚡ Generate Executive Report', cmd: 'Generate executive finops report PDF for 30 days' },
+  { label: '⚡ Provision Cloud Budget', cmd: 'Create budget for AWS with amount $5000' },
+  { label: '⚡ Simulate Rightsizing', cmd: 'Simulate rightsizing savings across active cloud workloads' },
+  { label: '⚡ Evaluate Alert Rules', cmd: 'Evaluate active budget thresholds and alert rules' },
+  { label: '⚡ Clear All Alerts', cmd: 'Mark all alerts as read' },
+  { label: '⚡ Audit Tag Governance', cmd: 'Audit tag governance compliance across cloud resources' },
+];
 
 const SUGGESTED_QUERIES = [
   'What is our current monthly cloud spend and trend?',
@@ -106,6 +118,8 @@ export function AIAnalyst() {
         missing_data_acknowledged: response.missing_data_acknowledged,
         missing_data_details: response.missing_data_details,
         mode: response.mode,
+        task_executed: response.task_executed,
+        action_performed: response.action_performed,
       };
 
       setMessages((prev) => [...prev, assistantMsg]);
@@ -162,18 +176,37 @@ export function AIAnalyst() {
         </div>
       </div>
 
-      {/* Suggested Quick Prompts */}
-      <div className="flex flex-wrap gap-2">
-        {SUGGESTED_QUERIES.map((sq, i) => (
-          <button
-            key={i}
-            onClick={() => handleSendMessage(sq)}
-            disabled={loading}
-            className="text-xs bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 border border-slate-800 hover:border-cyan-500/30 rounded-lg px-3 py-1.5 transition text-left"
-          >
-            💬 {sq}
-          </button>
-        ))}
+      {/* Actionable Agentic Commands & Suggestions */}
+      <div className="space-y-2">
+        <div className="text-xs font-semibold text-slate-400 flex items-center gap-1.5 uppercase tracking-wider">
+          <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
+          <span>Execute Workspace Tasks (AI Autonomous Commands):</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {AGENTIC_TASKS.map((task, i) => (
+            <button
+              key={i}
+              onClick={() => handleSendMessage(task.cmd)}
+              disabled={loading}
+              className="text-xs font-medium bg-cyan-950/40 hover:bg-cyan-900/60 text-cyan-300 hover:text-cyan-200 border border-cyan-500/30 hover:border-cyan-400 rounded-lg px-3 py-1.5 transition text-left shadow-sm flex items-center gap-1"
+            >
+              <span>{task.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap gap-2 pt-1">
+          {SUGGESTED_QUERIES.map((sq, i) => (
+            <button
+              key={i}
+              onClick={() => handleSendMessage(sq)}
+              disabled={loading}
+              className="text-xs bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 border border-slate-800 hover:border-cyan-500/30 rounded-lg px-3 py-1.5 transition text-left"
+            >
+              💬 {sq}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Conversation Thread */}
@@ -207,6 +240,17 @@ export function AIAnalyst() {
                     : 'bg-slate-900/90 text-slate-200 border-slate-800 rounded-bl-none shadow-sm'
                 }`}
               >
+                {/* Task Execution Banner */}
+                {m.task_executed && (
+                  <div className="mb-3 p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                    <span className="font-semibold text-emerald-400 uppercase tracking-wide">✓ Actionable Task Executed:</span>
+                    <code className="bg-emerald-950/60 px-2 py-0.5 rounded text-emerald-200 font-mono text-[11px]">
+                      {m.action_performed || 'task_complete'}()
+                    </code>
+                  </div>
+                )}
+
                 <div className="whitespace-pre-wrap">{m.content}</div>
 
                 {/* Missing Data Explicit Acknowledgment Banner */}

@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime, timedelta
 from typing import Any
 from sqlalchemy.orm import Session
@@ -16,9 +17,17 @@ from ..models import (
 )
 from .cost_aggregation import get_cost_summary, get_dashboard_metrics
 from .forecast_service import generate_cost_forecast
-from .anomaly_service import list_anomalies
+from .anomaly_service import list_anomalies, run_anomaly_detection
 from .carbon_service import get_carbon_summary
-from .optimization_service import get_recommendations_with_priority, get_savings_ledger_summary
+from .optimization_service import (
+    get_recommendations_with_priority,
+    get_savings_ledger_summary,
+    run_what_if_simulation,
+)
+from .alert_service import evaluate_organization_alerts, mark_all_alerts_read
+from .budget_service import create_budget, evaluate_budget
+from .report_service import create_and_run_report
+from .tag_governance import evaluate_tag_governance
 
 # Allowlisted Backend Tool Registry (strictly safe functions, zero arbitrary SQL)
 ALLOWLISTED_TOOLS = {
@@ -26,48 +35,105 @@ ALLOWLISTED_TOOLS = {
         "name": "get_cost_summary",
         "description": "Retrieves aggregated cloud spend, provider breakdown, daily costs, and top services.",
         "parameters": {"days": "int (default 30)", "provider": "string (optional)", "service": "string (optional)"},
+        "category": "Telemetry & Analytics",
         "target_model": "CostRecord",
     },
     "get_forecast": {
         "name": "get_forecast",
         "description": "Generates a multi-horizon cost forecast with confidence intervals and baseline comparison.",
         "parameters": {"horizon": "int (7-90 days)", "provider": "string (optional)"},
+        "category": "Predictive Modeling",
         "target_model": "CostRecord (Historical time-series)",
     },
     "get_anomalies": {
         "name": "get_anomalies",
         "description": "Lists detected cost and usage anomalies with severity, financial impact, and root causes.",
         "parameters": {"severity": "string (HIGH/MEDIUM/CRITICAL, optional)", "provider": "string (optional)"},
+        "category": "Telemetry & Analytics",
         "target_model": "Anomaly",
+    },
+    "run_anomaly_detection": {
+        "name": "run_anomaly_detection",
+        "description": "Executes the statistical Isolation Forest anomaly detector across all historical billing time series.",
+        "parameters": {"contamination": "float (default 0.08)"},
+        "category": "Actionable Task",
+        "target_model": "Anomaly Engine",
+    },
+    "create_budget": {
+        "name": "create_budget",
+        "description": "Provisions a new cloud budget with automated threshold alert tracking.",
+        "parameters": {"amount": "float", "threshold": "float", "name": "string", "target": "string"},
+        "category": "Actionable Task",
+        "target_model": "Budget",
+    },
+    "create_and_run_report": {
+        "name": "create_and_run_report",
+        "description": "Compiles and executes an authoritative PDF or CSV FinOps intelligence digest.",
+        "parameters": {"report_type": "string", "report_format": "PDF/CSV", "period_days": "int"},
+        "category": "Actionable Task",
+        "target_model": "Report Artifact",
+    },
+    "evaluate_organization_alerts": {
+        "name": "evaluate_organization_alerts",
+        "description": "Evaluates all active budget thresholds and anomaly fingerprints against telemetry.",
+        "parameters": {},
+        "category": "Actionable Task",
+        "target_model": "Alert Rules",
+    },
+    "mark_all_alerts_read": {
+        "name": "mark_all_alerts_read",
+        "description": "Acknowledges and clears all unread alerts across the workspace.",
+        "parameters": {},
+        "category": "Actionable Task",
+        "target_model": "Alert Inbox",
+    },
+    "run_what_if_simulation": {
+        "name": "run_what_if_simulation",
+        "description": "Executes rightsizing and workload down-scaling simulation models.",
+        "parameters": {"scenario": "string (AGGRESSIVE_RIGHTSIZING/MODERATE)"},
+        "category": "Actionable Task",
+        "target_model": "Simulation Engine",
+    },
+    "evaluate_tag_governance": {
+        "name": "evaluate_tag_governance",
+        "description": "Audits cloud resources for compliance against required FinOps tags.",
+        "parameters": {},
+        "category": "Actionable Task",
+        "target_model": "Governance Engine",
     },
     "get_carbon_summary": {
         "name": "get_carbon_summary",
         "description": "Returns greenhouse gas emissions in kgCO2e/MTCO2e, provider/scope breakdown, and grid factors.",
         "parameters": {},
+        "category": "GreenOps & Sustainability",
         "target_model": "CarbonRecord",
     },
     "get_optimization_recommendations": {
         "name": "get_optimization_recommendations",
         "description": "Retrieves evidence-backed rightsizing and idle recommendations with prioritized scoring.",
         "parameters": {"priority": "string (BALANCE/COST/EMISSIONS/RISK_AVOIDANT)"},
+        "category": "Cost Optimization",
         "target_model": "Recommendation",
     },
     "get_budgets": {
         "name": "get_budgets",
         "description": "Retrieves budget limits, actual period spend, utilization %, and breach status.",
         "parameters": {},
+        "category": "Governance & Operations",
         "target_model": "Budget",
     },
     "get_security_findings": {
         "name": "get_security_findings",
         "description": "Retrieves cloud resource security and compliance posture findings.",
         "parameters": {"status": "string (default OPEN)"},
+        "category": "Security & Compliance",
         "target_model": "SecurityFinding",
     },
     "get_savings_ledger": {
         "name": "get_savings_ledger",
         "description": "Retrieves verified realized savings, expected forecast savings, and realization rate.",
         "parameters": {},
+        "category": "Cost Optimization",
         "target_model": "SavingsLedger",
     },
 }
@@ -151,9 +217,213 @@ def process_analyst_query(
     sources = []
     missing_data_acknowledged = False
     missing_data_details = []
+    is_task_executed = False
+    action_performed = None
 
-    # Intent Classification & Tool Execution
-    if any(k in q for k in ["forecast", "predict", "next month", "future spend", "run-rate"]):
+    # --------------------------------------------------------------------------
+    # 0. Zero-Leakage Privacy Guardrails (Client, Owner & Sensitive Number Protection)
+    # --------------------------------------------------------------------------
+    # Strictly reject any inquiry attempting to extract client/owner details, phone
+    # numbers, mobile numbers, credit card numbers, tax IDs, passwords, or secrets.
+    privacy_keywords = [
+        "phone", "mobile", "contact number", "cell number", "telephone",
+        "owner phone", "client phone", "owner details", "client details",
+        "credit card", "card number", "cvv", "social security", "ssn",
+        "password", "secret key", "dump users", "dump passwords", "private key",
+        "owner number", "client number", "leak", "personal number", "admin phone"
+    ]
+    if any(k in q for k in privacy_keywords):
+        return {
+            "answer": (
+                "🔒 Zero-Leakage Privacy Refusal: Access to personal client and owner contact numbers, "
+                "phone records, identity numbers, or authentication secrets is strictly prohibited under "
+                "CloudSense AI Enterprise Privacy Governance. No personal or financial numbers can be retrieved or disclosed."
+            ),
+            "mode": "privacy_guardrail_enforcement",
+            "tools_invoked": ["zero_leakage_privacy_guardrail"],
+            "citations": [{"policy": "Zero Information Leakage Standard", "status": "BLOCKED"}],
+            "missing_data_acknowledged": False,
+            "missing_data_details": [],
+            "task_executed": False,
+            "action_performed": "blocked_privacy_violation",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+    # --------------------------------------------------------------------------
+    # 1. Actionable Agent Commands (Executing real workspace FinOps tasks)
+    # --------------------------------------------------------------------------
+    if any(k in q for k in ["run anomaly", "detect anomal", "scan anomal", "find cost spike", "trigger anomal", "scan for anomal", "detect outlier"]):
+        tools_invoked.append("run_anomaly_detection")
+        tools_invoked.append("get_anomalies")
+        run_res = run_anomaly_detection(db, organization_id)
+        anom_list = list_anomalies(db, organization_id)
+        total_imp = sum(a.get("financial_impact", 0) for a in anom_list)
+        is_task_executed = True
+        action_performed = "run_anomaly_detection"
+        sources.append({
+            "tool": "run_anomaly_detection",
+            "model": "Anomaly Engine (Isolation Forest)",
+            "window": "Evaluated all historical daily costs",
+            "evaluated_samples": len(anom_list),
+        })
+        top_anom = f" Top finding: {anom_list[0]['reason']} on {anom_list[0]['provider']} (${anom_list[0]['financial_impact']:,.2f})." if anom_list else ""
+        answer = (
+            f"⚡ Task Completed: Anomaly Detection Scan Executed.\n\n"
+            f"I ran the Isolation Forest machine learning engine across your workspace's historical billing time series. "
+            f"Detected {len(anom_list)} active cost spikes and outliers with a cumulative estimated impact of ${total_imp:,.2f}.{top_anom} "
+            f"All findings have been logged to the Anomalies Dashboard for investigation."
+        )
+
+    elif any(k in q for k in ["create budget", "add budget", "set budget", "make budget", "provision budget"]):
+        tools_invoked.append("create_budget")
+        tools_invoked.append("evaluate_budget")
+        is_task_executed = True
+        action_performed = "create_budget"
+        
+        # Parse amount
+        amt_match = re.search(r'\$?([0-9]+(?:\.[0-9]+)?)', q.replace(',', ''))
+        amount = float(amt_match.group(1)) if amt_match else 2500.0
+        
+        # Parse target & scope
+        provider = "ALL"
+        scope = "ORGANIZATION"
+        for p in ["aws", "azure", "gcp"]:
+            if p in q:
+                provider = p.upper()
+                scope = "PROVIDER"
+                break
+                
+        budget_name = f"{provider} Operational Budget" if scope == "PROVIDER" else "CloudSense FinOps Guardrail Budget"
+        b_res = create_budget(
+            db,
+            organization_id,
+            {
+                "name": budget_name,
+                "amount": amount,
+                "threshold": 0.85,
+                "scope": scope,
+                "target": provider,
+                "period": "MONTHLY",
+            }
+        )
+        sources.append({
+            "tool": "create_budget",
+            "model": "Budget",
+            "window": "Monthly Tracking Window",
+            "evaluated_samples": 1,
+        })
+        answer = (
+            f"⚡ Task Completed: Budget Provisioned.\n\n"
+            f"Successfully created new {b_res['period'].capitalize()} budget '{b_res['name']}' with an allocated ceiling of "
+            f"${b_res['amount']:,.2f} and an 85% early-warning threshold alert. Real-time spend tracking has been initiated (current utilization: {b_res['percentage_used']}%)."
+        )
+
+    elif any(k in q for k in ["generate report", "create report", "make report", "generate executive", "run finops digest", "generate pdf", "download report", "generate digest"]):
+        tools_invoked.append("create_and_run_report")
+        is_task_executed = True
+        action_performed = "generate_report"
+        fmt = "CSV" if "csv" in q else "PDF"
+        days = 7 if "7" in q else (90 if "90" in q else 30)
+        rep = create_and_run_report(
+            db,
+            organization_id,
+            user_id,
+            report_type="EXECUTIVE_DIGEST",
+            report_format=fmt,
+            period_days=days,
+        )
+        sources.append({
+            "tool": "create_and_run_report",
+            "model": "Report Artifact",
+            "window": f"{days}-Day Period",
+            "evaluated_samples": 1,
+        })
+        answer = (
+            f"⚡ Task Completed: Executive FinOps Report Compiled.\n\n"
+            f"Successfully compiled and signed authoritative {fmt} report '{rep['name']}'. "
+            f"Reconciled multi-cloud billing, forecast projections, carbon emissions, and rightsizing opportunities. "
+            f"The report is available for immediate download in Reports Manager (Report ID: {rep['id'][:8]})."
+        )
+
+    elif any(k in q for k in ["mark all alerts as read", "mark alerts read", "clear alerts", "dismiss alerts", "acknowledge alerts"]):
+        tools_invoked.append("mark_all_alerts_read")
+        is_task_executed = True
+        action_performed = "mark_all_alerts_read"
+        count = mark_all_alerts_read(db, organization_id)
+        sources.append({
+            "tool": "mark_all_alerts_read",
+            "model": "Alert Inbox",
+            "window": "All Active Alerts",
+            "evaluated_samples": count,
+        })
+        answer = (
+            f"⚡ Task Completed: Alerts Acknowledged.\n\n"
+            f"Successfully marked {count} active alerts as acknowledged and read across your workspace. Your notifications inbox is now up to date."
+        )
+
+    elif any(k in q for k in ["evaluate alert", "check alert", "scan alert", "run alert rules", "test alert"]):
+        tools_invoked.append("evaluate_organization_alerts")
+        is_task_executed = True
+        action_performed = "evaluate_organization_alerts"
+        eval_res = evaluate_organization_alerts(db, organization_id)
+        sources.append({
+            "tool": "evaluate_organization_alerts",
+            "model": "Alert Rules",
+            "window": "Real-time Telemetry Snapshot",
+            "evaluated_samples": eval_res.get("evaluated_budgets", 0),
+        })
+        answer = (
+            f"⚡ Task Completed: Alert Rules Evaluated.\n\n"
+            f"Evaluated {eval_res.get('evaluated_budgets', 0)} active budgets and anomaly fingerprints against current spend telemetry. "
+            f"Created {eval_res.get('created_alerts', 0)} new alerts and updated {eval_res.get('updated_alerts', 0)} existing threshold records."
+        )
+
+    elif any(k in q for k in ["simulate rightsize", "simulate savings", "run simulation", "simulate downsize", "optimize idle"]):
+        tools_invoked.append("run_what_if_simulation")
+        tools_invoked.append("get_recommendations_with_priority")
+        is_task_executed = True
+        action_performed = "run_what_if_simulation"
+        sim_res = run_what_if_simulation(db, organization_id, scenario="AGGRESSIVE_RIGHTSIZING")
+        summary = sim_res.get("summary", {})
+        proj_save = summary.get("projected_monthly_savings", 0.0)
+        proj_co2 = summary.get("projected_monthly_carbon_saving_kg", 0.0)
+        impacted = summary.get("total_impacted_resources", 0)
+        sources.append({
+            "tool": "run_what_if_simulation",
+            "model": "Simulation Engine",
+            "window": "Active Resources Snapshot",
+            "evaluated_samples": impacted,
+        })
+        answer = (
+            f"⚡ Task Completed: Rightsizing Simulation Executed.\n\n"
+            f"Simulated rightsizing and decommissioning idle capacity across active cloud workloads. "
+            f"Projected cost savings: ${proj_save:,.2f}/month (${proj_save * 12:,.2f}/year) with avoided emissions of "
+            f"{proj_co2:.1f} kgCO2e/month across {impacted} impacted cloud instances. View scenario breakdown in Optimization."
+        )
+
+    elif any(k in q for k in ["audit tags", "evaluate tag", "check tags", "tag governance", "tag audit"]):
+        tools_invoked.append("evaluate_tag_governance")
+        is_task_executed = True
+        action_performed = "evaluate_tag_governance"
+        gov_res = evaluate_tag_governance(db, organization_id)
+        sources.append({
+            "tool": "evaluate_tag_governance",
+            "model": "Governance Engine",
+            "window": "All Cloud Resources",
+            "evaluated_samples": gov_res.get("total_resources", 0),
+        })
+        answer = (
+            f"⚡ Task Completed: Tag Governance Audit Completed.\n\n"
+            f"Inspected all cloud resources against mandatory FinOps tags (Environment, Owner, CostCenter). "
+            f"Evaluated {gov_res.get('total_resources', 0)} resources: {gov_res.get('compliant_count', 0)} compliant, "
+            f"{gov_res.get('non_compliant_count', 0)} non-compliant ({gov_res.get('untagged_count', 0)} untagged). "
+            f"Overall organization compliance score: {gov_res.get('compliance_rate', 0):.1f}%."
+        )
+
+    # --------------------------------------------------------------------------
+    # 2. Informational & Analytical Inquiries
+    # --------------------------------------------------------------------------
+    elif any(k in q for k in ["forecast", "predict", "next month", "future spend", "run-rate"]):
         tools_invoked.append("get_forecast")
         res = tool_get_forecast(db, organization_id, horizon=30)
         sources.append({
@@ -359,19 +629,24 @@ def process_analyst_query(
         AuditLog(
             organization_id=organization_id,
             user_id=user_id,
-            action="ai_analyst_query",
+            action="ai_analyst_task_execution" if is_task_executed else "ai_analyst_query",
             status="SUCCESS",
             detail=f"Invoked tools: {', '.join(tools_invoked)}",
         )
     )
     db.commit()
 
+    from ..security import sanitize_string
+    sanitized_answer = sanitize_string(answer)
+
     return {
-        "answer": answer,
+        "answer": sanitized_answer,
         "mode": "deterministic_grounded_tool_execution",
         "tools_invoked": tools_invoked,
         "citations": sources,
         "missing_data_acknowledged": missing_data_acknowledged,
         "missing_data_details": missing_data_details,
+        "task_executed": is_task_executed,
+        "action_performed": action_performed,
         "timestamp": datetime.utcnow().isoformat(),
     }

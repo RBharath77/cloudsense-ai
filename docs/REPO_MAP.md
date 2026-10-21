@@ -17,6 +17,15 @@ cloudsense-ai/
 ├── .venv/                           # Local virtual environment (currently Python 3.14 without packages)
 ├── README.md                        # Project overview and setup instructions
 ├── docker-compose.yml               # Multi-container orchestration (PostgreSQL, Redis, backend, frontend)
+├── deploy/                          # Enterprise Production Deployment & Load Balancing
+│   ├── README.md                    # Production deployment and operations guide
+│   ├── docker-compose.prod.yml      # High-concurrency production stack (Nginx, Replicas)
+│   ├── nginx/
+│   │   └── load_balancer.conf       # High-burst rate-limited HTTPS reverse proxy (443 & 80)
+│   └── ssl/
+│       ├── generate_ssl_certs.sh    # Automated TLS/SSL SAN certificate generator
+│       ├── cloudsense.crt           # 4096-bit TLS certificate
+│       └── cloudsense.key           # Private key with 0600 permissions
 ├── backend/                         # FastAPI backend service
 │   ├── Dockerfile                   # Python 3.11/Debian container definition
 │   ├── alembic/                     # Database migration framework
@@ -35,7 +44,8 @@ cloudsense-ai/
 │       ├── main.py                  # FastAPI app with route definitions
 │       ├── ml.py                    # Trend forecasting and IsolationForest anomaly detection
 │       ├── providers.py             # CloudProvider base class & MockCloudProvider (AWS, Azure, GCP)
-│       ├── seed.py                  # Demo dataset generator (NovaTech Solutions, 120 resources, 90-day costs)
+│       ├── seed.py                  # Demo dataset generator (CloudSense AI, 120 resources, 90-day costs)
+
 │       ├── ai/                      # AI assistant module directory (currently placeholder)
 │       ├── alerts/                  # Alerting module directory (placeholder)
 │       ├── api/                     # Sub-routes directory (placeholder)

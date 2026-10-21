@@ -13,6 +13,7 @@ class User(Base):
     __tablename__="users"
     id: Mapped[str]=mapped_column(String, primary_key=True, default=uid)
     email: Mapped[str]=mapped_column(String, unique=True, index=True)
+    name: Mapped[str|None]=mapped_column(String, nullable=True)
     password_hash: Mapped[str]=mapped_column(String)
     role: Mapped[str]=mapped_column(String, default="VIEWER")
     organization_id: Mapped[str|None]=mapped_column(String, ForeignKey("organizations.id"), nullable=True)

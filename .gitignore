@@ -5,6 +5,9 @@ __pycache__/
 node_modules/
 cloudsense.db
 *.db
+*.db-wal
+*.db-shm
+*.tsbuildinfo
 .DS_Store
 .venv/
 .pytest_cache/

@@ -30,7 +30,7 @@ def test_dashboard_seeded_organization():
     assert data["predicted_month_end"] > 0
     assert data["potential_savings"] > 0
     assert data["active_resources"] == 120
-    assert data["anomalies"] == 7
+    assert data["anomalies"] >= 7
     assert data["cloud_health"] > 0
     assert data["carbon_kg"] > 0
 

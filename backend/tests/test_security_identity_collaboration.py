@@ -336,3 +336,110 @@ def test_workspace_profile_and_settings_update(tenant_fixture):
     assert updated["name"] == "Enterprise FinOps Cloud"
     assert updated["currency"] == "EUR"
     assert updated["timezone"] == "Europe/London"
+
+def test_user_invitation_with_ai_generated_password_and_email(tenant_fixture):
+    tf = tenant_fixture
+    admin_headers = tf["admin_a"]["headers"]
+    invite_email = f"sarah.connor.{uuid.uuid4().hex[:8]}@testcorp.internal"
+
+    # Admin invites a new teammate without supplying a password
+    invite_res = client.post(
+        "/api/users/invite",
+        json={
+            "email": invite_email,
+            "name": "Sarah Connor",
+            "role": "FINOPS_ENGINEER",
+        },
+        headers=admin_headers,
+    )
+    assert invite_res.status_code == 201
+    inv_data = invite_res.json()
+    assert inv_data["email"] == invite_email
+    assert inv_data["name"] == "Sarah Connor"
+    assert inv_data["role"] == "FINOPS_ENGINEER"
+    assert "temporary_password" in inv_data
+    temp_pass = inv_data["temporary_password"]
+    assert len(temp_pass) >= 12
+
+    # The invited teammate logs in with the AI-generated temporary password
+    login_res = client.post(
+        "/api/auth/login",
+        json={"email": invite_email, "password": temp_pass},
+    )
+    assert login_res.status_code == 200
+    token = login_res.json()["access_token"]
+    assert token
+
+def test_authenticated_user_password_change_with_otp(tenant_fixture):
+    tf = tenant_fixture
+    viewer_headers = tf["viewer_a"]["headers"]
+    viewer_email = tf["viewer_a"]["email"]
+
+    # 1. User requests password change OTP
+    req_otp = client.post("/api/auth/request-password-change-otp", headers=viewer_headers)
+    assert req_otp.status_code == 200
+    assert "Verification code sent" in req_otp.json()["message"]
+
+    # 2. Submitting invalid OTP fails
+    bad_change = client.post(
+        "/api/auth/change-password-with-otp",
+        json={"code": "000000", "new_password": "BrandNewSecretPass456!"},
+        headers=viewer_headers,
+    )
+    assert bad_change.status_code == 400
+    assert "invalid" in bad_change.json()["detail"].lower() or "expired" in bad_change.json()["detail"].lower()
+
+    # 3. Submitting valid test OTP succeeds
+    good_change = client.post(
+        "/api/auth/change-password-with-otp",
+        json={"code": "849201", "new_password": "BrandNewSecretPass456!"},
+        headers=viewer_headers,
+    )
+    assert good_change.status_code == 200
+    assert "successfully" in good_change.json()["message"].lower()
+
+    # 4. Old password no longer works
+    old_login = client.post(
+        "/api/auth/login",
+        json={"email": viewer_email, "password": "Pass123!"},
+    )
+    assert old_login.status_code == 401
+
+    # 5. New password works
+    new_login = client.post(
+        "/api/auth/login",
+        json={"email": viewer_email, "password": "BrandNewSecretPass456!"},
+    )
+    assert new_login.status_code == 200
+
+def test_admin_direct_password_reset_without_otp(tenant_fixture):
+    tf = tenant_fixture
+    admin_headers = tf["admin_a"]["headers"]
+    finops_headers = tf["finops_a"]["headers"]
+    finops_id = tf["finops_a"]["id"]
+    finops_email = tf["finops_a"]["email"]
+
+    # Non-admin attempting direct reset -> 403 Forbidden
+    res_forbidden = client.post(
+        f"/api/users/{finops_id}/reset-password",
+        json={"new_password": "UnauthorizedResetPass1!"},
+        headers=finops_headers,
+    )
+    assert res_forbidden.status_code == 403
+
+    # Admin directly resets teammate's password (Zero OTP required)
+    res_admin_direct = client.post(
+        f"/api/users/{finops_id}/reset-password",
+        json={"new_password": "DirectAdminNewSecret789!"},
+        headers=admin_headers,
+    )
+    assert res_admin_direct.status_code == 200
+    assert "updated successfully" in res_admin_direct.json()["message"]
+
+    # User can log in with new password set by Admin
+    login_res = client.post(
+        "/api/auth/login",
+        json={"email": finops_email, "password": "DirectAdminNewSecret789!"},
+    )
+    assert login_res.status_code == 200
+

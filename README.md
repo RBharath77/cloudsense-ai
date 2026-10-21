@@ -130,7 +130,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r backend/requirements.txt
 
-# Seed demonstration database (NovaTech Solutions with 120 resources & 90-day telemetry)
+# Seed demonstration database (CloudSense AI with 120 resources & 90-day telemetry)
 bash scripts/seed.sh
 
 # Start FastAPI development server
@@ -150,7 +150,8 @@ Visit `http://localhost:3000` in your browser.
 
 ## 5. Demonstration Credentials
 
-The deterministic seed script configures a multi-tenant demonstration organization (`NovaTech Solutions`):
+The deterministic seed script configures a multi-tenant demonstration organization (`CloudSense AI`):
+
 
 | Role | Email | Password | Access Level |
 |---|---|---|---|

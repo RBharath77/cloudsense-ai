@@ -250,3 +250,55 @@ def test_background_digest_jobs_lifecycle(auth_headers):
     jobs = list_res.json()
     assert len(jobs) >= 1
     assert any(j["id"] == job_data["id"] for j in jobs)
+
+def test_ai_analyst_actionable_task_execution(auth_headers):
+    # 1. Command: Run anomaly detection scan
+    res_scan = client.post(
+        "/api/assistant/chat",
+        json={"message": "Please run anomaly detection scan on our cloud billing"},
+        headers=auth_headers,
+    )
+    assert res_scan.status_code == 200
+    data_scan = res_scan.json()
+    assert data_scan["task_executed"] is True
+    assert data_scan["action_performed"] == "run_anomaly_detection"
+    assert "Task Completed: Anomaly Detection Scan Executed" in data_scan["answer"]
+    assert "run_anomaly_detection" in data_scan["tools_invoked"]
+
+    # 2. Command: Create budget
+    res_budget = client.post(
+        "/api/assistant/chat",
+        json={"message": "Create budget for AWS amount $4500"},
+        headers=auth_headers,
+    )
+    assert res_budget.status_code == 200
+    data_b = res_budget.json()
+    assert data_b["task_executed"] is True
+    assert data_b["action_performed"] == "create_budget"
+    assert "Task Completed: Budget Provisioned" in data_b["answer"]
+    assert "4,500" in data_b["answer"]
+
+    # 3. Command: Generate executive report
+    res_rep = client.post(
+        "/api/assistant/chat",
+        json={"message": "Generate executive finops report pdf for 30 days"},
+        headers=auth_headers,
+    )
+    assert res_rep.status_code == 200
+    data_r = res_rep.json()
+    assert data_r["task_executed"] is True
+    assert data_r["action_performed"] == "generate_report"
+    assert "Task Completed: Executive FinOps Report Compiled" in data_r["answer"]
+
+    # 4. Command: Mark all alerts as read
+    res_clear = client.post(
+        "/api/assistant/chat",
+        json={"message": "Please mark all alerts as read"},
+        headers=auth_headers,
+    )
+    assert res_clear.status_code == 200
+    data_c = res_clear.json()
+    assert data_c["task_executed"] is True
+    assert data_c["action_performed"] == "mark_all_alerts_read"
+    assert "Task Completed: Alerts Acknowledged" in data_c["answer"]
+

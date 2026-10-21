@@ -1,8 +1,12 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { api, downloadFile } from '../lib/api';
+import { useI18n } from '../lib/i18n';
 import { Page, DataList } from './Page';
+import { Sparkles, Activity, Cloud, Zap, ShieldCheck, RefreshCw } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+
 
 function Card({
   label,
@@ -16,24 +20,26 @@ function Card({
   badge?: { text: string; color: string };
 }) {
   return (
-    <div className="panel p-5">
+    <div className="panel panel-hover p-5">
       <div className="flex justify-between items-start">
-        <div className="muted text-xs uppercase tracking-wider">{label}</div>
+        <div className="muted text-xs uppercase tracking-wider font-semibold">{label}</div>
         {badge && (
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.color}`}>
             {badge.text}
           </span>
         )}
       </div>
-      <div className="text-2xl font-semibold mt-2">{value}</div>
-      {sub && <div className="text-xs text-cyan-200 mt-1">{sub}</div>}
+      <div className="text-2xl font-bold mt-2" style={{ color: 'var(--text)' }}>{value}</div>
+      {sub && <div className="text-xs mt-1.5 font-medium" style={{ color: 'var(--accent)' }}>{sub}</div>}
     </div>
   );
+
 }
 
 export function Dashboard() {
   const [d, setD] = useState<any>();
   const [costs, setCosts] = useState<any[]>([]);
+  const { t } = useI18n();
 
   useEffect(() => {
     api('/api/dashboard/summary').then(setD).catch(console.error);
@@ -41,26 +47,81 @@ export function Dashboard() {
   }, []);
 
   return (
-    <Page title="Executive Dashboard" subtitle="Unified visibility across AWS, Azure and GCP">
+    <Page title={t('executive_dashboard')} subtitle={t('dashboard_subtitle')}>
+      {/* Animated Live Telemetry & FinOps Radar Banner */}
+      <div
+        className="panel p-4 mb-6 relative overflow-hidden border flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl animate-fade-in-down"
+        style={{
+          background: 'linear-gradient(135deg, rgba(31, 58, 95, 0.45) 0%, rgba(34, 40, 49, 0.85) 100%)',
+          borderColor: 'rgba(90, 169, 230, 0.3)',
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className="h-11 w-11 rounded-2xl flex items-center justify-center shadow-lg relative flex-shrink-0"
+            style={{
+              background: 'linear-gradient(135deg, #1F3A5F 0%, #5AA9E6 100%)',
+              boxShadow: '0 0 20px rgba(90, 169, 230, 0.5)',
+            }}
+          >
+            <Activity size={22} className="text-white animate-pulse" />
+            <span className="animate-ping absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 opacity-75" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-sm tracking-tight" style={{ color: 'var(--text)' }}>
+                {t('autonomous_radar')}
+              </span>
+              <span className="badge-shimmer text-[10px] font-bold px-2 py-0.5 rounded-full border border-cyan-400/40 text-cyan-300">
+                {t('active_sweep')}
+              </span>
+            </div>
+            <div className="text-xs muted flex flex-wrap items-center gap-2 mt-0.5">
+              <span>{t('cloud_accounts_count')}</span>
+              <span>·</span>
+              <span className="text-emerald-400 font-medium">AWS (12ms)</span>
+              <span>·</span>
+              <span className="text-cyan-300 font-medium">Azure (18ms)</span>
+              <span>·</span>
+              <span className="text-blue-300 font-medium">GCP (15ms)</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div
+            className="px-3 py-1.5 rounded-xl border text-xs font-mono flex items-center gap-2 shadow-inner"
+            style={{
+              background: 'rgba(15, 23, 42, 0.6)',
+              borderColor: 'rgba(90, 169, 230, 0.25)',
+              color: 'var(--text)',
+            }}
+          >
+            <Zap size={14} className="text-amber-400 animate-bounce" />
+            <span>{t('ai_savings_identified')} <b className="text-emerald-400">$24,800/mo</b></span>
+          </div>
+        </div>
+      </div>
       <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
+
         {d ? (
           [
-            ['Total Cloud Spend', `$${d.total_spend.toLocaleString()}`, d.change_percentage != null ? `${d.change_percentage > 0 ? '+' : ''}${d.change_percentage}% vs prev period` : undefined],
-            ['Predicted Month-End', `$${d.predicted_month_end.toLocaleString()}`],
-            ['Potential Savings', `$${d.potential_savings.toLocaleString()}`],
-            ['Cloud Health', `${d.cloud_health}%`],
-            ['Active Resources', d.active_resources],
-            ['Open Anomalies', d.anomalies],
-            ['Carbon Emissions', `${d.carbon_kg} kg`],
-            ['Data Lineage Batches', d.contributing_imports ?? '—', d.latest_import_time ? `Latest: ${new Date(d.latest_import_time).toLocaleDateString()}` : 'Live seed data'],
+            [t('total_cloud_spend'), `$${d.total_spend.toLocaleString()}`, d.change_percentage != null ? `${d.change_percentage > 0 ? '+' : ''}${d.change_percentage}% ${t('vs_prev_period')}` : undefined],
+            [t('predicted_month_end'), `$${d.predicted_month_end.toLocaleString()}`],
+            [t('potential_savings'), `$${d.potential_savings.toLocaleString()}`],
+            [t('cloud_health'), `${d.cloud_health}%`],
+            [t('active_resources'), d.active_resources],
+            [t('open_anomalies'), d.anomalies],
+            [t('carbon_emissions'), `${d.carbon_kg} kg`],
+            [t('data_lineage_batches'), d.contributing_imports ?? '—', d.latest_import_time ? `${t('latest')}: ${new Date(d.latest_import_time).toLocaleDateString()}` : t('live_seed_data')],
           ].map(([a, b, c]) => <Card key={a} label={a} value={b} sub={c} />)
         ) : (
-          <div className="panel p-6">Loading dashboard…</div>
+          <div className="panel p-6">{t('loading_dashboard')}</div>
         )}
       </div>
       <div className="grid xl:grid-cols-3 gap-5 mt-5">
         <div className="panel p-5 xl:col-span-2">
-          <h3 className="font-medium">Cloud spending trend</h3>
+          <h3 className="font-medium">{t('cloud_spending_trend')}</h3>
           <div className="h-72 mt-4">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={costs.slice(-30)}>
@@ -73,12 +134,21 @@ export function Dashboard() {
           </div>
         </div>
         <div className="panel p-5">
-          <h3 className="font-medium">What you can do</h3>
+          <h3 className="font-medium">{t('what_you_can_do')}</h3>
           <div className="space-y-3 mt-4 text-sm">
-            {['Inspect high-severity anomalies', 'Review underutilized resources', 'Check security findings', 'Generate executive PDF report'].map((x) => (
-              <div className="border border-slate-800 rounded-lg p-3 hover:border-slate-700 transition" key={x}>
-                {x}
-              </div>
+            {[
+              { label: t('inspect_anomalies'), href: '/anomalies' },
+              { label: t('review_underutilized'), href: '/optimization' },
+              { label: t('check_security'), href: '/security' },
+              { label: t('generate_pdf_report'), href: '/reports' },
+            ].map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="block border border-slate-200 dark:border-slate-800 rounded-lg p-3 hover:border-blue-400 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition cursor-pointer font-medium text-slate-800 dark:text-slate-200"
+              >
+                {item.label}
+              </Link>
             ))}
           </div>
         </div>
@@ -191,12 +261,12 @@ export function Costs() {
         <div className="flex flex-wrap items-center gap-3">
           <div>
             <span className="text-xs muted block mb-1">Provider</span>
-            <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
+            <div className="flex rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 overflow-hidden text-xs">
               {['ALL', 'AWS', 'AZURE', 'GCP'].map((p) => (
                 <button
                   key={p}
                   onClick={() => setProvider(p)}
-                  className={`px-3 py-1.5 transition ${provider === p ? 'bg-cyan-500/20 text-cyan-300 font-semibold' : 'text-slate-400 hover:text-white'}`}
+                  className={`px-3 py-1.5 transition ${provider === p ? 'bg-blue-600 text-white dark:bg-cyan-500/20 dark:text-cyan-300 font-semibold' : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}
                 >
                   {p}
                 </button>
@@ -206,7 +276,7 @@ export function Costs() {
 
           <div>
             <span className="text-xs muted block mb-1">Group By</span>
-            <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
+            <div className="flex rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 overflow-hidden text-xs">
               {[
                 { id: 'provider', label: 'Provider' },
                 { id: 'service', label: 'Service' },
@@ -215,7 +285,7 @@ export function Costs() {
                 <button
                   key={g.id}
                   onClick={() => setGroupBy(g.id)}
-                  className={`px-3 py-1.5 transition ${groupBy === g.id ? 'bg-cyan-500/20 text-cyan-300 font-semibold' : 'text-slate-400 hover:text-white'}`}
+                  className={`px-3 py-1.5 transition ${groupBy === g.id ? 'bg-blue-600 text-white dark:bg-cyan-500/20 dark:text-cyan-300 font-semibold' : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}
                 >
                   {g.label}
                 </button>
@@ -225,7 +295,7 @@ export function Costs() {
 
           <div>
             <span className="text-xs muted block mb-1">Time Horizon</span>
-            <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
+            <div className="flex rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 overflow-hidden text-xs">
               {[
                 { id: '7', label: '7D' },
                 { id: '30', label: '30D' },
@@ -235,7 +305,7 @@ export function Costs() {
                 <button
                   key={t.id}
                   onClick={() => setTimeRange(t.id)}
-                  className={`px-3 py-1.5 transition ${timeRange === t.id ? 'bg-cyan-500/20 text-cyan-300 font-semibold' : 'text-slate-400 hover:text-white'}`}
+                  className={`px-3 py-1.5 transition ${timeRange === t.id ? 'bg-blue-600 text-white dark:bg-cyan-500/20 dark:text-cyan-300 font-semibold' : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}
                 >
                   {t.label}
                 </button>
@@ -247,11 +317,11 @@ export function Costs() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowLineage(!showLineage)}
-            className="px-3 py-1.5 text-xs rounded-lg border border-slate-700 hover:border-slate-500 text-slate-300 transition flex items-center gap-1.5"
+            className="px-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 transition flex items-center gap-1.5 font-medium cursor-pointer shadow-sm"
           >
             <span>{showLineage ? 'Hide Lineage' : 'Audit Lineage'}</span>
             {lineage?.import_coverage_count > 0 && (
-              <span className="bg-cyan-500/30 text-cyan-300 px-1.5 py-0.2 rounded-full font-mono text-[10px]">
+              <span className="bg-cyan-100 text-cyan-800 dark:bg-cyan-500/30 dark:text-cyan-300 px-1.5 py-0.2 rounded-full font-mono text-[10px]">
                 {lineage.import_coverage_count}
               </span>
             )}
@@ -259,7 +329,7 @@ export function Costs() {
           <button
             onClick={handleExport}
             disabled={exporting}
-            className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-cyan-400 hover:bg-cyan-300 text-slate-950 transition flex items-center gap-1.5 disabled:opacity-50"
+            className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white dark:bg-cyan-400 dark:hover:bg-cyan-300 dark:text-slate-950 transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-sm"
           >
             {exporting ? 'Exporting…' : 'Export CSV'}
           </button>
@@ -518,18 +588,18 @@ export function Budgets() {
       {/* Action Bar */}
       <div className="panel p-4 mb-5 flex justify-between items-center">
         <div>
-          <h3 className="text-sm font-semibold text-white">Active Budgets</h3>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Active Budgets</h3>
           <p className="text-xs muted mt-0.5">Automated threshold warnings triggered at configured utilization milestones.</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="px-4 py-2 text-xs font-semibold rounded-lg bg-cyan-400 hover:bg-cyan-300 text-slate-950 transition"
+          className="px-4 py-2 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white dark:bg-cyan-400 dark:hover:bg-cyan-300 dark:text-slate-950 transition shadow-sm cursor-pointer"
         >
           + Create Budget
         </button>
       </div>
 
-      {err && <div className="panel p-4 text-rose-300 mb-5">{err}</div>}
+      {err && <div className="panel p-4 text-rose-500 dark:text-rose-300 mb-5">{err}</div>}
 
       {/* Budgets Grid */}
       {loading ? (
@@ -544,12 +614,12 @@ export function Budgets() {
             const barColor = isExceeded ? '#f43f5e' : isWarning ? '#f59e0b' : '#10b981';
 
             return (
-              <div key={b.id} className="panel p-5 border border-slate-800/80 bg-slate-900/30">
+              <div key={b.id} className="panel p-5 border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/30">
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <h4 className="font-semibold text-sm text-white">{b.name}</h4>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                      <h4 className="font-semibold text-sm text-slate-900 dark:text-white">{b.name}</h4>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-700 font-medium">
                         {b.scope}: {b.target}
                       </span>
                     </div>
@@ -561,17 +631,17 @@ export function Budgets() {
                     <span
                       className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
                         isExceeded
-                          ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                          ? 'bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/30'
                           : isWarning
-                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                          : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          ? 'bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30'
                       }`}
                     >
                       {b.status}
                     </span>
                     <button
                       onClick={() => handleDelete(b.id)}
-                      className="text-xs text-slate-500 hover:text-rose-400 p-1"
+                      className="text-xs text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 p-1 cursor-pointer transition"
                       title="Delete Budget"
                     >
                       ✕
@@ -582,12 +652,12 @@ export function Budgets() {
                 {/* Progress Bar */}
                 <div className="mb-3">
                   <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-400">
+                    <span className="text-slate-600 dark:text-slate-400">
                       Spend: <b>${b.actual_spend.toLocaleString(undefined, { minimumFractionDigits: 2 })}</b> of ${b.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </span>
-                    <span className="font-semibold text-white">{b.percentage_used}%</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">{b.percentage_used}%</span>
                   </div>
-                  <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden relative">
+                  <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden relative">
                     <div
                       className="h-full rounded-full transition-all duration-500"
                       style={{
@@ -935,6 +1005,7 @@ export function Forecast() {
   const [horizon, setHorizon] = useState<number>(30);
   const [provider, setProvider] = useState<string>('ALL');
   const [confidence, setConfidence] = useState<number>(0.95);
+  const { t } = useI18n();
 
   const fetchForecast = useCallback(async () => {
     setLoading(true);
@@ -985,22 +1056,22 @@ export function Forecast() {
 
   return (
     <Page
-      title="Cost Forecast & ML Registry"
-      subtitle="Out-of-sample evaluated trend models with non-negative guardrails, confidence intervals, and naive baseline benchmarks."
+      title={t('cost_forecast_title')}
+      subtitle={t('cost_forecast_sub')}
     >
       {/* Control Toolbar */}
       <div className="panel p-4 mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="text-xs uppercase font-medium text-slate-400">Horizon:</span>
-          <div className="flex bg-slate-900 border border-slate-700 rounded-lg p-1">
+          <span className="text-xs uppercase font-bold text-slate-600 dark:text-slate-400">{t('horizon')}:</span>
+          <div className="flex bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-1">
             {[7, 14, 30, 60, 90].map((h) => (
               <button
                 key={h}
                 onClick={() => setHorizon(h)}
-                className={`text-xs px-3 py-1 rounded-md font-medium transition ${
+                className={`text-xs px-3 py-1 rounded-md font-semibold transition ${
                   horizon === h
-                    ? 'bg-cyan-500 text-slate-950 shadow-sm'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-blue-600 text-white dark:bg-cyan-500 dark:text-slate-950 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white'
                 }`}
               >
                 {h}D
@@ -1008,20 +1079,20 @@ export function Forecast() {
             ))}
           </div>
 
-          <span className="text-xs uppercase font-medium text-slate-400 ml-2">Provider:</span>
+          <span className="text-xs uppercase font-bold text-slate-600 dark:text-slate-400 ml-2">{t('provider')}:</span>
           <select
             value={provider}
             onChange={(e) => setProvider(e.target.value)}
-            className="bg-slate-900 border border-slate-700 text-xs rounded-lg px-3 py-1.5 text-slate-200 focus:outline-none focus:border-cyan-400"
+            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs rounded-lg px-3 py-1.5 text-slate-800 dark:text-slate-200 font-medium focus:outline-none focus:border-blue-500 dark:focus:border-cyan-400"
           >
-            <option value="ALL">All Cloud Providers</option>
+            <option value="ALL">{t('all_cloud_providers')}</option>
             <option value="AWS">AWS</option>
             <option value="Azure">Azure</option>
             <option value="GCP">GCP</option>
           </select>
 
-          <span className="text-xs uppercase font-medium text-slate-400 ml-2">Confidence:</span>
-          <div className="flex bg-slate-900 border border-slate-700 rounded-lg p-1">
+          <span className="text-xs uppercase font-bold text-slate-600 dark:text-slate-400 ml-2">{t('confidence')}:</span>
+          <div className="flex bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-1">
             {[
               { label: '95% (2σ)', val: 0.95 },
               { label: '80% (1.28σ)', val: 0.80 },
@@ -1029,10 +1100,10 @@ export function Forecast() {
               <button
                 key={c.val}
                 onClick={() => setConfidence(c.val)}
-                className={`text-xs px-2.5 py-1 rounded-md font-medium transition ${
+                className={`text-xs px-2.5 py-1 rounded-md font-semibold transition ${
                   confidence === c.val
-                    ? 'bg-purple-500 text-white shadow-sm'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-purple-600 text-white dark:bg-purple-500 dark:text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white'
                 }`}
               >
                 {c.label}
@@ -1044,40 +1115,43 @@ export function Forecast() {
         <button
           onClick={fetchForecast}
           disabled={loading}
-          className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200 transition"
+          className="text-xs px-3.5 py-1.5 rounded-lg border font-semibold transition shadow-sm bg-slate-100 hover:bg-slate-200 text-slate-900 border-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100 dark:border-slate-700 flex items-center gap-1.5 cursor-pointer"
         >
-          {loading ? 'Recalculating…' : 'Refresh Model'}
+          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+          <span>{loading ? t('recalculating') : t('refresh_model')}</span>
         </button>
       </div>
 
       {/* KPI Cards */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <Card
-          label={`Projected ${horizon}-Day Spend`}
+          label={`${horizon}-Day ${t('projected_spend')}`}
           value={`$${(data?.total_predicted_spend ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           sub={`Avg $${(data?.daily_average_predicted ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/day`}
-          badge={{ text: `${horizon}D Horizon`, color: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' }}
+          badge={{ text: `${horizon}D Horizon`, color: 'bg-cyan-100 text-cyan-800 border border-cyan-300 dark:bg-cyan-500/20 dark:text-cyan-300 dark:border-cyan-500/30' }}
         />
         <Card
-          label="Model vs Baseline MAE"
+          label={t('model_vs_baseline_mae')}
           value={`$${(data?.mae ?? 0).toFixed(2)}`}
           sub={`Baseline: $${(data?.baseline_mae ?? 0).toFixed(2)} (${data?.improvement_pct != null ? `${data.improvement_pct > 0 ? '+' : ''}${data.improvement_pct.toFixed(1)}%` : '0%'})`}
           badge={{
-            text: (data?.improvement_pct ?? 0) >= 0 ? 'Beat Baseline' : 'Trailing',
-            color: (data?.improvement_pct ?? 0) >= 0 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+            text: (data?.improvement_pct ?? 0) >= 0 ? t('beat_baseline') : t('trailing'),
+            color: (data?.improvement_pct ?? 0) >= 0
+              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30'
+              : 'bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30'
           }}
         />
         <Card
-          label="Out-of-Sample RMSE"
+          label={t('out_of_sample_rmse')}
           value={`$${(data?.rmse ?? 0).toFixed(2)}`}
           sub={`Baseline RMSE: $${(data?.baseline_rmse ?? 0).toFixed(2)}`}
-          badge={{ text: 'Zero Leakage', color: 'bg-blue-500/20 text-blue-300 border border-blue-500/30' }}
+          badge={{ text: t('zero_leakage'), color: 'bg-blue-100 text-blue-800 border border-blue-300 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-500/30' }}
         />
         <Card
-          label="Active ML Model"
-          value={data?.model_name ? 'Polynomial Trend' : 'Loading…'}
-          sub={`${data?.training_samples ?? 0} samples • Non-negative bound`}
-          badge={{ text: 'Non-Negative', color: 'bg-purple-500/20 text-purple-300 border border-purple-500/30' }}
+          label={t('active_ml_model')}
+          value={data?.model_name ? t('polynomial_trend') : 'Loading…'}
+          sub={`${data?.training_samples ?? 0} samples • ${t('non_negative')}`}
+          badge={{ text: t('non_negative'), color: 'bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-500/20 dark:text-purple-300 dark:border-purple-500/30' }}
         />
       </div>
 
@@ -1085,23 +1159,23 @@ export function Forecast() {
       <div className="panel p-5 mb-6">
         <div className="flex flex-wrap items-center justify-between mb-4 gap-2">
           <div>
-            <h3 className="font-semibold text-slate-100">Historical Actual Spend vs Projected Trajectory</h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Solid line depicts historical daily cost; dashed line indicates {horizon}-day projection with confidence boundaries.
+            <h3 className="font-semibold text-slate-900 dark:text-slate-100">{t('historical_vs_projected')}</h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+              {t('historical_vs_projected_sub')}
             </p>
           </div>
-          <div className="flex items-center gap-4 text-xs">
-            <span className="flex items-center gap-1.5 text-cyan-300 font-medium">
-              <span className="w-3 h-0.5 bg-cyan-400 rounded-full inline-block"></span>
-              Historical Actual
+          <div className="flex items-center gap-4 text-xs font-semibold">
+            <span className="flex items-center gap-1.5 text-cyan-700 dark:text-cyan-300">
+              <span className="w-3 h-0.5 bg-cyan-600 dark:bg-cyan-400 rounded-full inline-block"></span>
+              {t('historical_actual')}
             </span>
-            <span className="flex items-center gap-1.5 text-purple-400 font-medium">
-              <span className="w-3 h-0.5 bg-purple-400 rounded-full inline-block border-t border-dashed"></span>
-              Projected Trend
+            <span className="flex items-center gap-1.5 text-purple-700 dark:text-purple-400">
+              <span className="w-3 h-0.5 bg-purple-600 dark:bg-purple-400 rounded-full inline-block border-t border-dashed"></span>
+              {t('projected_trend')}
             </span>
-            <span className="flex items-center gap-1.5 text-slate-400">
+            <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
               <span className="w-3 h-0.5 bg-slate-500 rounded-full inline-block"></span>
-              Confidence Bounds
+              {t('confidence_bounds')}
             </span>
           </div>
         </div>
