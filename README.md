@@ -1,235 +1,390 @@
-# CloudSense AI
+<div align="center">
 
-[![Platform Status](https://img.shields.io/badge/status-production--ready-emerald.svg)](#)
-[![Python Version](https://img.shields.io/badge/python-3.11-blue.svg)](#)
-[![Next.js Version](https://img.shields.io/badge/next.js-15.4-black.svg)](#)
-[![Tests Passing](https://img.shields.io/badge/tests-104%2F104%20passing-brightgreen.svg)](#)
-[![License](https://img.shields.io/badge/license-MIT-purple.svg)](#)
+# ☁️ CloudSense AI
 
-> **See Your Cloud. Understand Your Spend. Decarbonize Intelligently.**
-> CloudSense AI is an enterprise-grade multi-cloud FinOps, machine learning cost forecasting, automated resource remediation, and CarbonSense™ environmental intelligence platform across AWS, Azure, and Google Cloud Platform (GCP).
+### See Your Cloud. Understand Your Spend. Decarbonize Intelligently.
+
+**Intelligent Cloud Cost · FinOps · Forecasting · Optimization · Carbon Intelligence**
+
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.116.1-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=nextdotjs&logoColor=white)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+
+*A multi-cloud FinOps and sustainability intelligence platform built to connect cloud spending, operational decisions, and environmental impact in one place.*
+
+</div>
 
 ---
 
-## 1. Architectural Overview
+## ✨ Why CloudSense AI?
 
-CloudSense AI bridges the gap between financial cost governance and carbon sustainability through a single authoritative source of truth. Every card, chart, report, and simulation reconciles with the database layer.
+Cloud environments can be expensive, complex, and difficult to govern consistently. CloudSense AI brings cost visibility, machine-learning-assisted analysis, optimization workflows, and carbon intelligence into one platform.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                  CloudSense AI Platform                                  │
-└─────────────────────────────────────────────────────────────────────────────────────────┘
-        │                                  │                                  │
- ┌──────────────┐                  ┌──────────────┐                   ┌──────────────┐
- │ AWS Adapter  │                  │Azure Adapter │                   │ GCP Adapter  │
- │ IAM Role ARN │                  │Service Princ.│                   │Service Acct. │
- └──────────────┘                  └──────────────┘                   └──────────────┘
-        │                                  │                                  │
-        └──────────────────────────────────┼──────────────────────────────────┘
-                                           ▼
-                    ┌─────────────────────────────────────────┐
-                    │ Multi-Tenant Normalization & Ingestion  │
-                    │  Idempotent SHA-256 Deduplication Pipeline│
-                    └─────────────────────────────────────────┘
-                                           │
-                                           ▼
-                    ┌─────────────────────────────────────────┐
-                    │ PostgreSQL 17 / SQLite 3 Local Database │
-                    │   21 Normalized Enterprise Tables       │
-                    └─────────────────────────────────────────┘
-                                           │
-                    ┌──────────────────────┴──────────────────────┐
-                    ▼                                             ▼
-     ┌─────────────────────────────┐               ┌─────────────────────────────┐
-     │  FinOps Intelligence Core   │               │   CarbonSense™ Engine       │
-     │ • Polynomial Forecasting    │               │ • GHG Scope 1, 2, 3 Protocol│
-     │ • Isolation Forest Anomaly  │               │ • EPA eGRID 2024 / EEA 2023 │
-     │ • RCA Root Cause Engine     │               │ • Regional Grid Factors     │
-     │ • Priority Scoring Engine   │               │ • Hardware Wattage Deltas   │
-     └─────────────────────────────┘               └─────────────────────────────┘
-                    │                                             │
-                    └──────────────────────┬──────────────────────┘
-                                           ▼
-                    ┌─────────────────────────────────────────┐
-                    │  FastAPI 0.116.1 Backend API Engine     │
-                    │ • Enterprise RBAC (ADMIN, FINOPS, etc.) │
-                    │ • Prometheus /metrics Plaintext Exporter│
-                    │ • HMAC-SHA256 Signed Outbound Webhooks  │
-                    │ • Shift-Left Terraform Plan Diff Engine │
-                    │ • Kubernetes Container Allocation (Idle)│
-                    └─────────────────────────────────────────┘
-                                           │
-                                           ▼
-                    ┌─────────────────────────────────────────┐
-                    │  Next.js 15 + React 19 Frontend Console │
-                    │ • 25 Statically Generated Fast Routes   │
-                    │ • Glassmorphism Design System           │
-                    │ • Live Telemetry & What-If Simulators   │
-                    └─────────────────────────────────────────┘
+It is designed around a key principle: **every insight should be traceable to data, every sensitive action should be controlled, and simulated telemetry should never be mistaken for live cloud data.**
+
+### At a glance
+
+| Capability | What it does |
+|---|---|
+| 💸 **FinOps visibility** | Explore cloud costs by provider, service, time period, and organizational context. |
+| 📈 **Cost forecasting** | Generate multi-horizon trend forecasts with evaluation metrics and confidence bounds. |
+| 🚨 **Anomaly detection** | Identify unusual cost patterns and provide deterministic root-cause diagnostics. |
+| 🎯 **Budgets & governance** | Track budget thresholds, deduplicated alerts, and mandatory cost-tag compliance. |
+| 🌱 **CarbonSense™** | Estimate and classify greenhouse-gas emissions using documented regional factors and source-aware accounting. |
+| 🛠️ **Optimization workflows** | Rank recommendations, explore what-if scenarios, and maintain a savings ledger. |
+| 🔐 **Security & auditability** | Apply role-based access control, token revocation, tenant isolation, and audit logging. |
+| 🧱 **Infrastructure FinOps** | Analyze Terraform plan diffs and Kubernetes idle-resource allocation. |
+| 📄 **Executive reporting** | Produce database-reconciled PDF reports and sanitized CSV exports. |
+
+---
+
+## 🧭 Platform Architecture
+
+```mermaid
+flowchart TB
+    A[AWS Adapter] --> D[Multi-tenant ingestion & normalization]
+    B[Azure Adapter] --> D
+    C[GCP Adapter] --> D
+    D --> E[(PostgreSQL 17 / SQLite 3)]
+    E --> F[FinOps Intelligence]
+    E --> G[CarbonSense™ Engine]
+    F --> H[FastAPI Backend]
+    G --> H
+    H --> I[Next.js 15 + React 19 Console]
+    H --> J[Reports, Webhooks & Metrics]
+    H --> K[Background Jobs & Remediation Workflows]
 ```
 
----
+### Architecture principles
 
-## 2. Complete 13-Phase Delivered Capabilities
-
-| Phase | Subsystem | Key Capabilities & Invariants |
-|---|---|---|
-| **Phase 1** | **Audit & Data Stabilization** | Documented database baselines, eliminated zero-value chart regressions, isolated demo telemetry, and enforced non-fabrication invariants. |
-| **Phase 2** | **Billing Import Engine** | Transactional CSV ingestion (`backend/app/services/billing_import.py`) with SHA-256 duplicate rejection, idempotency key replay, and zero partial writes. |
-| **Phase 3** | **Cost Explorer & Data Lineage** | Multi-dimensional aggregation service (`/api/costs`), period-over-period tracking, and CSV export with formula-injection sanitization (`=`, `+`, `-`, `@`). |
-| **Phase 4** | **Budgets, Alerts & Tag Governance** | Persistent budgets (`/api/budgets`), SHA-256 fingerprint deduplicated alerting, and compliance auditing across mandatory cost tags (`Environment`, `Owner`, `Project`). |
-| **Phase 5** | **Forecasting, Anomalies & RCA** | Multi-horizon trend regression (7D–90D), dynamic confidence intervals (80%/95%), Isolation Forest anomaly detection, and deterministic Root Cause Analysis. |
-| **Phase 6** | **CarbonSense™ Sustainability** | Source-aware greenhouse gas accounting (Scope 1, Scope 2 market/location, Scope 3) using published EPA eGRID 2024 and EEA 2023 regional grid intensity factors. |
-| **Phase 7** | **Optimization, Simulator & Ledger** | Telemetry-grounded recommendations, 4 priority scoring modes (`BALANCE`, `COST`, `EMISSIONS`, `RISK_AVOIDANT`), read-only what-if simulator, and verified savings ledger. |
-| **Phase 8** | **AI Analyst & Executive Reports** | Grounded AI assistant querying authorized backend tools, and database-reconciled PDF and sanitized CSV executive digest generation. |
-| **Phase 9** | **Security, Identity & Collaboration** | FinOps RBAC (`ADMIN`, `FINOPS_ENGINEER`, `AUDITOR`, `VIEWER`), JWT JTI token revocation on logout (`RevokedToken`), and queryable structured audit trail (`/api/audit/logs`). |
-| **Phase 10** | **Multi-Cloud Ingestion Connectors** | Pluggable read-only adapters (`backend/app/providers/`) for AWS, Azure, and GCP. Validates IAM Role ARNs and Service Principals with zero raw secret exposure. |
-| **Phase 11** | **Background Jobs & Observability** | Task runner for periodic sweeps, `/health` active DB latency pings, Prometheus `/metrics` exporter, HMAC-SHA256 cryptographic webhooks, and human-in-the-loop remediation. |
-| **Phase 12** | **Shift-Left IaC & Container FinOps** | Pre-deployment Terraform plan JSON cost & carbon diff analyzer, CI/CD policy guardrails (`PASSED`, `WARNING`, `BLOCKED`), and Kubernetes idle waste allocation (`/iac`). |
-| **Phase 13** | **Release Readiness & Hardening** | Python 3.11 container hardening, automated secret scan across repository, deterministic master seed generator, and 100% test verification (104/104 tests). |
+- **One authoritative data layer:** dashboards, reports, simulations, and analytics should reconcile with persisted records.
+- **Idempotent ingestion:** SHA-256-based duplicate checks and idempotency handling help prevent duplicate billing imports.
+- **Multi-tenant isolation:** data access is scoped to the authenticated organization.
+- **Read-first cloud integrations:** provider adapters are designed for credential validation and read-only ingestion.
+- **Controlled remediation:** proposed changes require approval before execution and must have a rollback plan.
+- **Observable operations:** health checks, metrics, structured audit events, and background-job visibility support troubleshooting.
 
 ---
 
-## 3. Technology Stack
+## 🧠 Core Intelligence
 
-- **Frontend**: Next.js 15.4.6 (App Router), React 19.1.1, TypeScript 5.8, Tailwind CSS 4, Recharts 2.15, Framer Motion 12.4.
-- **Backend**: Python 3.11, FastAPI 0.116.1, Pydantic 2.11, SQLAlchemy 2.0, Passlib (bcrypt 4.3), ReportLab 4.4.
-- **Analytics & ML**: Scikit-learn 1.7.1 (Isolation Forest), NumPy 2.3.2, Pandas 2.3.2.
-- **Databases & Cache**: PostgreSQL 17 (production), SQLite 3 (local zero-dependency fallback), Redis 7 (caching/broker).
-- **Testing**: Pytest 8.4.1 (104 tests across 14 specialized suites).
+### 💸 FinOps Intelligence
+
+- Cost explorer with provider/service grouping and date filters
+- Period-over-period cost analysis and data lineage
+- Multi-horizon forecasts from **7 to 90 days**
+- Forecast evaluation using **MAE, RMSE, and MAPE** where applicable
+- **80% and 95%** forecast confidence bounds
+- Isolation Forest-based anomaly detection
+- Deterministic root-cause analysis and recommendation prioritization
+- Persistent budgets, threshold alerts, and tag-compliance checks
+
+### 🌱 CarbonSense™ — Cloud Sustainability
+
+CloudSense™ connects cost optimization with environmental context.
+
+- Greenhouse-gas accounting organized around **Scope 1, Scope 2, and Scope 3**
+- Scope 2 market-based and location-based distinctions
+- Regional grid-intensity factors referenced in the project specification: **EPA eGRID 2024** and **EEA 2023**
+- Hardware wattage deltas for supported optimization scenarios
+- Emissions budgets and carbon-aware recommendation priorities
+- Source-aware reporting to distinguish estimates, assumptions, and reported data
+
+> **Important:** emissions estimates depend on the quality of usage data, region mapping, emission factors, and calculation assumptions. They should not be interpreted as audited carbon disclosures without independent validation.
+
+### 🛠️ Optimization & What-If Simulator
+
+Explore trade-offs with four prioritization modes:
+
+- `BALANCE` — balance competing priorities
+- `COST` — emphasize financial savings
+- `EMISSIONS` — emphasize emissions reduction
+- `RISK_AVOIDANT` — favor risk-conscious recommendations
+
+The simulator is designed for read-only scenario analysis. Remediation remains a controlled workflow, not an automatic production change.
+
+### 🤖 AI FinOps Analyst & Reporting
+
+- Natural-language analysis grounded in authorized backend tools
+- Executive PDF digest generation
+- Sanitized CSV exports
+- Background report jobs and database reconciliation
+
+The analyst should answer from available, authorized system data—not invented metrics or unsupported claims.
 
 ---
 
-## 4. Quickstart Guide
+## 🗺️ Application Feature Map
 
-### Option A: Running with Docker Compose (Recommended for Production/Evaluation)
+| Route | Purpose |
+|---|---|
+| `/dashboard` | Executive KPIs, cost trends, provider breakdown, anomaly alerts |
+| `/cloud-accounts` | AWS, Azure, and GCP connector configuration and sync status |
+| `/costs` | Cost explorer, date filters, grouping, sanitized CSV export |
+| `/forecast` | 7–90 day forecasts, confidence bounds, evaluation metrics |
+| `/anomalies` | Anomaly review and impact analysis |
+| `/rca` | Root-cause diagnostics and explanations |
+| `/optimization` | Prioritized recommendations, what-if scenarios, savings ledger |
+| `/iac` | Terraform plan diffs, policy checks, Kubernetes idle-resource analysis |
+| `/carbon` | Scope 1/2/3 views, regional factors, emissions budgets |
+| `/security` | Security and compliance findings |
+| `/sla` | Service-level agreement and uptime tracking |
+| `/budgets` | Budgets, spend aggregation, thresholds, burn rates |
+| `/alerts` | Alert triage: new, in progress, resolved |
+| `/assistant` | Grounded AI FinOps analyst |
+| `/system` | Diagnostics, background jobs, remediation, webhooks |
+| `/reports` | Executive PDF and CSV report generation |
+| `/settings` | Workspace, user management, roles, audit logs |
 
-Prerequisites: [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
+---
+
+## 🧰 Technology Stack
+
+<table>
+  <tr>
+    <td><strong>Frontend</strong></td>
+    <td>Next.js 15.4.6 · React 19.1.1 · TypeScript 5.8 · Tailwind CSS 4 · Recharts 2.15 · Framer Motion 12.4</td>
+  </tr>
+  <tr>
+    <td><strong>Backend</strong></td>
+    <td>Python 3.11 · FastAPI 0.116.1 · Pydantic 2.11 · SQLAlchemy 2.0</td>
+  </tr>
+  <tr>
+    <td><strong>Data & ML</strong></td>
+    <td>scikit-learn 1.7.1 · NumPy 2.3.2 · Pandas 2.3.2</td>
+  </tr>
+  <tr>
+    <td><strong>Database & cache</strong></td>
+    <td>PostgreSQL 17 · SQLite 3 · Redis 7</td>
+  </tr>
+  <tr>
+    <td><strong>Reporting & security</strong></td>
+    <td>ReportLab 4.4 · bcrypt 4.3 · JWT-based sessions · HMAC-SHA256 webhooks</td>
+  </tr>
+  <tr>
+    <td><strong>Quality</strong></td>
+    <td>Pytest 8.4.1 · reported 104 tests across 14 specialized suites</td>
+  </tr>
+</table>
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Python 3.11
+- Node.js and npm compatible with the frontend project
+- Git
+- Docker Desktop for the containerized setup (optional)
+
+### Option A — Docker Compose
+
+> Recommended for evaluating the full multi-service setup, provided the repository includes the referenced Compose configuration.
 
 ```bash
-# 1. Clone repository
 git clone https://github.com/your-org/cloudsense-ai.git
 cd cloudsense-ai
-
-# 2. Launch multi-container environment (PostgreSQL 17 + Redis 7 + Backend + Frontend)
 docker compose up --build
 ```
-- Frontend application: `http://localhost:3000`
-- Interactive OpenAPI / Swagger documentation: `http://localhost:8000/docs`
-- Prometheus Metrics Exporter: `http://localhost:8000/metrics`
-- Subsystem Health Check: `http://localhost:8000/health`
 
----
+Open the services:
 
-### Option B: Local Development Setup (Zero-Docker SQLite Mode)
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:3000 |
+| API documentation | http://localhost:8000/docs |
+| Health check | http://localhost:8000/health |
+| Prometheus metrics | http://localhost:8000/metrics |
 
-#### 1. Backend Service
+**Repository note:** replace `your-org` in the clone URL with the actual GitHub organization or username before running it.
+
+### Option B — Local development with SQLite
+
+#### 1. Create and activate a virtual environment
+
 ```bash
-# In the repository root:
-python3 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
+```
+
+On Windows PowerShell, activate it with:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+#### 2. Install backend dependencies
+
+```bash
+python -m pip install --upgrade pip
 pip install -r backend/requirements.txt
+```
 
-# Seed demonstration database (CloudSense AI with 120 resources & 90-day telemetry)
+#### 3. Seed the demonstration database
+
+```bash
 bash scripts/seed.sh
+```
 
-# Start FastAPI development server
+The supplied project notes describe a deterministic demonstration dataset containing **120 resources and 90 days of telemetry**. Treat seeded telemetry as demonstration data, not as a live cloud-provider connection.
+
+#### 4. Start the API
+
+```bash
 uvicorn backend.app.main:app --reload --port 8000
 ```
 
-#### 2. Frontend Application
+#### 5. Start the frontend in a second terminal
+
 ```bash
-# In a new terminal tab:
 cd frontend
 npm install
 npm run dev
 ```
-Visit `http://localhost:3000` in your browser.
+
+Visit **http://localhost:3000**.
+
+> If a command fails, check that your local repository contains the referenced path and that your installed dependency versions match the project configuration.
 
 ---
 
-## 5. Demonstration Credentials
+## 🧪 Testing & Verification
 
-The deterministic seed script configures a multi-tenant demonstration organization (`CloudSense AI`):
-
-
-| Role | Email | Password | Access Level |
-|---|---|---|---|
-| **Platform Administrator** | `admin@cloudsense.ai` | `CloudSense@123` | Full administrative control, connectors, jobs, approvals |
-| **FinOps Engineer** | *Created via `/settings`* | *Custom* | Connect accounts, trigger syncs, propose/approve actions |
-| **Auditor** | *Created via `/settings`* | *Custom* | Read-only audit logs, executive digests, compliance |
-| **Viewer** | *Created via `/settings`* | *Custom* | Read-only visibility across dashboards and analytics |
-
----
-
-## 6. Frontend Navigation & Feature Map
-
-```
-/dashboard         Executive Overview: KPI Cards, Cost Trend, Provider Breakdown, Anomaly Alerts
-/cloud-accounts    Multi-Cloud Connectors: AWS, Azure, GCP Credentials, Sync Jobs, Status
-/costs             Authoritative Cost Explorer: Group by Service/Provider, Date Filters, Sanitized CSV Export
-/forecast          Multi-Horizon ML Forecast: 7D-90D Horizons, 80%/95% Confidence Bounds, MAE/RMSE
-/anomalies         Anomaly Detection Center: Isolation Forest Residual Envelopes & Impact Analysis
-/rca               Root Cause Analysis: Deterministic Diagnostics & Explanations
-/optimization      Optimization & Simulator: Priority Modes, What-If Scenarios, Savings Ledger
-/iac               Shift-Left IaC & Container FinOps: Terraform Plan Diff, Policies, K8s Idle Waste
-/carbon            CarbonSense™ Engine: GHG Scope 1/2/3 Breakdown, EPA eGRID Factors, Emissions Budgets
-/security          Cloud Security & Compliance Findings
-/sla               Multi-Cloud Service Level Agreement (SLA) & Uptime Tracking
-/budgets           Persistent Budgets: Live Spend Aggregations, Threshold Alerts, Burn-Rates
-/alerts            Deduplicated Alert Inbox: Triage Workflows (New, In Progress, Resolved)
-/assistant         Grounded AI FinOps Analyst: Natural Language Answers from Database Tools
-/system            System & Ops: Telemetry Diagnostics, Background Jobs Queue, Action Remediation, Webhooks
-/reports           Executive PDF & CSV Digest Generator
-/settings          Workspace Profile, User Management, RBAC Roles, and Queryable Audit Logs
-```
-
----
-
-## 7. Automated Test Suite & Verification
-
-CloudSense AI enforces rigorous automated testing across every subsystem:
+Run the backend test suite from the repository root:
 
 ```bash
-# Run complete test suite (104 tests across 14 suites)
 .venv/bin/pytest -v
 ```
 
-### Test Suite Inventory:
-1. `backend/tests/test_iac_container_finops.py`: Terraform plan parsing, cost & carbon diffs, CI/CD policy gates, Kubernetes idle waste.
-2. `backend/tests/test_background_jobs_observability.py`: Health diagnostics, Prometheus metrics, background task runner, HMAC-SHA256 webhooks, remediation actions.
-3. `backend/tests/test_multicloud_connectors.py`: AWS IAM Role ARNs, Azure Service Principals, GCP Service Accounts, duplicate rejection, idempotent sync.
-4. `backend/tests/test_security_identity_collaboration.py`: RBAC role barriers, JTI session revocation, audit logging, multi-tenant isolation.
-5. `backend/tests/test_ai_analyst_reporting.py`: Reconciled PDF generation, formula injection protection, background report jobs.
-6. `backend/tests/test_optimization_simulator.py`: Hardware wattage carbon math, priority scoring, read-only what-if simulator, savings ledger.
-7. `backend/tests/test_forecast_anomalies.py`: Multi-horizon forecasts, evaluation metrics, anomaly envelopes, root cause analysis.
-8. `backend/tests/test_carbonsense.py`: Carbon summary aggregation, GHG Scope classification, EPA factors, CSV import, carbon budgets.
-9. `backend/tests/test_cost_explorer.py`: Reconciliation invariants, data lineage, formula injection sanitization, multi-tenant costs.
-10. `backend/tests/test_budgets_alerts.py`: Budget CRUD, threshold transitions, fingerprint deduplicated alerts, tag compliance.
-11. `backend/tests/test_billing_import.py`: Transactional CSV ingestion, duplicate rejection, idempotency replay, zero partial writes.
-12. `backend/tests/test_dashboard.py`: Subsystem health, demo login, dashboard metrics, empty organization regressions.
-13. `backend/tests/test_auth.py`: Password hashing and token security.
-14. `backend/tests/test_ml.py`: Regression trend forecasts and Isolation Forest anomaly baselines.
+Build the frontend for production:
 
 ```bash
-# Verify frontend production build (25 routes)
 cd frontend
 npm run build
 ```
 
+The project specification reports **104 passing backend tests across 14 suites**. Re-run the tests in your own checkout to confirm the current state; do not treat a previously reported result as proof that your current branch passes.
+
+### Test coverage areas
+
+- Billing import transactions, duplicate rejection, and idempotency
+- Cost aggregation, data lineage, tenant boundaries, and CSV sanitization
+- Budget CRUD, threshold transitions, alert deduplication, and tag governance
+- Forecasting metrics, anomaly detection, and root-cause analysis
+- Carbon accounting, regional factors, and carbon budgets
+- Optimization scoring, simulator behavior, and savings ledger
+- Authentication, RBAC, token revocation, and audit logs
+- Multi-cloud connector validation and sync idempotency
+- Terraform plan parsing, policy gates, and Kubernetes idle waste
+- Health diagnostics, background jobs, metrics, and signed webhooks
+- Report generation and formula-injection protection
+
 ---
 
-## 8. Security & Non-Fabrication Invariants
+## 🔐 Security & Trust Principles
 
-1. **Non-Fabrication Policy**: In the absence of live cloud provider credentials, connections activate *"CONNECTED (Simulated / Non-Fabricated Telemetry Mode)"* and explicitly flag `is_simulated: true`. No false socket claims or phantom billing calls are made.
-2. **Zero Raw Secret Exposure**: Sensitive credentials in `cloud_accounts` (`credentials_masked`) redact private keys and secret tokens (`****************`). Outbound webhook secrets are stored securely for signature validation.
-3. **Cryptographic Signatures**: Outgoing webhooks are authenticated with HMAC-SHA256 signatures in `X-CloudSense-Signature: sha256=...`.
-4. **Human-in-the-Loop Safeguards**: Remediation actions strictly default to `PROPOSED`; state mutating execution mandates approval by `ADMIN` or `FINOPS_ENGINEER`. Every action mandates an automated or documented `rollback_plan`.
-5. **CSV Formula Injection Sanitization**: All tabular and report CSV export cells starting with `=`, `+`, `-`, `@`, `\t`, or `\r` are sanitized with single-quote escaping to prevent execution in spreadsheet software.
-6. **Strict Multi-Tenancy**: Every query and write operation partitions by authenticated `organization_id`. Cross-tenant queries return 404 Not Found.
+Security and trustworthy reporting are foundational design goals.
+
+| Principle | Implementation described in the project |
+|---|---|
+| **No fabricated live telemetry** | Without real provider credentials, connections must be clearly marked as simulated; `is_simulated: true` identifies simulated telemetry. |
+| **Secret protection** | Credentials are masked in application views; raw private keys and tokens should not be exposed. |
+| **Signed webhooks** | Outbound webhook signatures use HMAC-SHA256 and the `X-CloudSense-Signature` header. |
+| **Human approval** | Remediation defaults to `PROPOSED`; state-changing actions require authorized approval and a rollback plan. |
+| **CSV safety** | Exported cells beginning with formula-triggering characters are sanitized to reduce spreadsheet formula-injection risk. |
+| **Tenant isolation** | Reads and writes are scoped to the authenticated `organization_id`. |
+| **Session revocation** | JWT token identifiers can be revoked on logout. |
+| **Auditability** | Structured audit records support review of relevant actions. |
+
+**Before production deployment:** verify authentication and authorization paths, secret storage, tenant isolation, provider IAM permissions, database migrations, CORS, rate limits, dependency vulnerabilities, and all remediation paths. A feature description is not a substitute for a security audit.
 
 ---
 
-## 9. License
+## 👤 Demonstration Access
 
-This project is licensed under the MIT License — see the LICENSE file for details.
+The project notes list the following seeded administrator account:
+
+| Role | Email | Password |
+|---|---|---|
+| Platform Administrator | `admin@cloudsense.ai` | `CloudSense@123` |
+
+These are **demonstration credentials only**. Confirm that the seed script creates this account before use. Never use these credentials in production; change or remove seeded accounts and rotate secrets before deploying.
+
+Other roles described by the project:
+
+- **FINOPS_ENGINEER** — manage cloud integrations and propose or approve permitted actions
+- **AUDITOR** — review audit records and reports
+- **VIEWER** — read-only dashboard and analytics access
+
+Exact permissions should be confirmed against the current authorization implementation.
+
+---
+
+## 🧩 Delivery Roadmap — 13 Phases
+
+The supplied project specification describes the following completed phases. Validate each against the current repository and test results before treating it as release evidence.
+
+1. **Audit & Data Stabilization** — database baselines, chart-regression fixes, demo telemetry isolation, non-fabrication rules.
+2. **Billing Import Engine** — transactional CSV ingestion, SHA-256 duplicate detection, idempotency, no partial writes.
+3. **Cost Explorer & Data Lineage** — cost aggregation, period comparisons, sanitized CSV exports.
+4. **Budgets, Alerts & Tag Governance** — persistent budgets, deduplicated alerts, mandatory-tag checks.
+5. **Forecasting, Anomalies & RCA** — multi-horizon forecasts, confidence intervals, Isolation Forest, deterministic diagnostics.
+6. **CarbonSense™ Sustainability** — source-aware emissions accounting and regional grid factors.
+7. **Optimization, Simulator & Ledger** — recommendation scoring, read-only what-if analysis, savings ledger.
+8. **AI Analyst & Executive Reports** — authorized data-grounded assistant and PDF/CSV reporting.
+9. **Security, Identity & Collaboration** — RBAC, token revocation, tenant isolation, audit trails.
+10. **Multi-Cloud Ingestion Connectors** — AWS, Azure, and GCP adapter architecture.
+11. **Background Jobs & Observability** — scheduled tasks, health checks, Prometheus metrics, signed webhooks, controlled remediation.
+12. **Shift-Left IaC & Container FinOps** — Terraform plan analysis, CI/CD policy gates, Kubernetes idle-resource analysis.
+13. **Release Readiness & Hardening** — container hardening, repository secret scanning, deterministic seeding, reported test verification.
+
+---
+
+## 🛣️ Suggested Next Steps
+
+Potential follow-on work for a production-oriented release:
+
+- Validate live AWS, Azure, and GCP integrations in isolated test accounts
+- Add documented environment-variable templates and secret-management guidance
+- Verify database migrations and backup/restore procedures
+- Add CI workflows for backend tests, frontend builds, linting, and dependency/security scans
+- Document forecast model assumptions, baselines, and limitations
+- Validate emission-factor provenance, units, geography mapping, and calculation methodology
+- Exercise tenant-isolation and authorization tests against adversarial cases
+- Document deployment, rollback, observability, and incident-response procedures
+
+---
+
+## 🤝 Contributing
+
+Contributions, issue reports, and practical suggestions are welcome.
+
+1. Fork the repository.
+2. Create a focused branch: `git checkout -b feature/your-feature`.
+3. Make changes with tests and relevant documentation.
+4. Run backend tests and the frontend production build.
+5. Open a pull request explaining the problem, solution, and verification performed.
+
+Please avoid committing credentials, private billing data, real cloud secrets, or unreviewed production remediation logic.
+
+---
+
+## 📜 License
+
+This project is described as licensed under the **MIT License**. See [`LICENSE`](LICENSE) in the repository for the full terms.
+
+---
+
+<div align="center">
+
+### 🌍 Make cloud decisions that make financial and environmental sense.
+
+**CloudSense AI** — visibility for your cloud, accountability for your spend, and context for your carbon impact.
+
+<sub>Built for thoughtful FinOps, transparent analytics, and safer cloud operations.</sub>
+
+</div>
